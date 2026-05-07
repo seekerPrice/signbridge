@@ -44,7 +44,7 @@ V1 is **one-way**: deaf signs → hearing hears. Reverse direction (speech → o
 
 ## Why AMD
 
-The MI300X's 192 GB HBM3 and 5.3 TB/s memory bandwidth let the entire multi-stage pipeline (sign classifier + Llama-3.1-8B + XTTS-v2) run concurrently on a single GPU. Bandwidth-bound streaming workload is the textbook MI300X use case. Practical accessibility tools running globally need the cost-and-availability profile that AMD enables.
+The MI300X's 192 GB HBM3 fits the entire pipeline (Qwen3-VL-8B + Llama-3.1-8B + XTTS-v2) on one GPU with margin. NVIDIA H100 (80 GB) requires sharding, and the V2 plan to upgrade to a 70B reasoner is impossible on H100 without a 3-GPU cluster. Single-GPU concurrency + 5.3 TB/s memory bandwidth is the actual AMD pitch — practical accessibility tools running globally need the cost-and-availability profile that AMD enables.
 
 ## Why this matters (business case)
 
@@ -53,6 +53,10 @@ Sign-language interpreters cost **$50–200 per hour** and are scarce. Courts, h
 ## Privacy
 
 Session-only. Frames and audio are processed in-memory and not persisted server-side beyond the WebSocket / HTTP session.
+
+## For Deaf-led teams
+
+SignBridge is open-source under MIT license and intentionally scoped to ASL-only V1. The pipeline is a substrate, not a finished product — Deaf-led organisations (schools-for-the-Deaf, NGOs, ministries) are the intended deployers. Other sign languages (BSL, MSL, CSL, ISL, +200 more) deserve their own teams, training data, and Deaf community leadership. See [`docs/walkthrough.md`](docs/walkthrough.md) → "Deployment ethics" for the design principles drawn from the Deaf-led academic literature.
 
 ## Local dev
 
