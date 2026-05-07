@@ -41,6 +41,11 @@ _VLM_VOCAB = (
     "see know understand think feel happy sad tired hungry wait "
     "unknown"
 )
+# Pre-built set for membership tests at recognition time. Tokens not in this
+# set get suppressed (confidence 0.0) — VLMs hallucinate strings like
+# "letter", "no_sign", "n/a" that would otherwise leak into the demo with a
+# fake 0.85 confidence.
+_VLM_VOCAB_SET = frozenset(_VLM_VOCAB.split())
 
 _PROMPT = (
     "You are an expert in American Sign Language (ASL). Look at this image of a "
@@ -163,10 +168,17 @@ def recognize_sign_from_frame(frame: np.ndarray) -> tuple[str, float]:
         )
         raw = (resp.choices[0].message.content or "").strip()
         token = _normalise(raw)
-    except Exception:  # noqa: BLE001 — broad at the boundary on purpose
-        logger.exception("VLM recognition failed; returning stub.")
+    except Exception as exc:  # noqa: BLE001 — broad at the boundary on purpose
+        # Log only the exception type — full message can include the request
+        # URL with embedded credentials when the OpenAI-compatible client
+        # bubbles up an httpx error. We pay log fidelity to avoid leaking the
+        # provider key into a public HF Space stdout.
+        logger.warning("VLM recognition failed: %s", type(exc).__name__)
         return "", 0.0
 
-    if token in {"", "unknown"}:
+    # Suppress any token that isn't in the closed vocabulary the prompt
+    # explicitly requested. Without this, a VLM that returns "letter" or
+    # "no_sign" would be reported as a confident prediction.
+    if token in {"", "unknown"} or token not in _VLM_VOCAB_SET:
         return "", 0.0
     return token, 0.85

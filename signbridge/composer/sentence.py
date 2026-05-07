@@ -125,11 +125,22 @@ def compose_sentence(signs: Sequence[str]) -> str:
             temperature=0.2,
             max_tokens=120,
         )
-        text = resp.choices[0].message.content or ""
-        return _strip_quotes(text.strip())
-    except Exception:  # noqa: BLE001 — broad catch is intentional at the boundary
-        logger.exception("composer LLM call failed; falling back to naive joiner.")
+        text = (resp.choices[0].message.content or "").strip()
+    except Exception as exc:  # noqa: BLE001 — broad catch is intentional at the boundary
+        # Log only the exception type; full message can include the request
+        # URL with embedded credentials when the OpenAI-compatible client
+        # surfaces an httpx error.
+        logger.warning("composer LLM call failed: %s", type(exc).__name__)
         return _naive_join(signs)
+
+    cleaned = _strip_quotes(text)
+    if not cleaned:
+        # LLM returned empty content — fall back to the naive joiner so the
+        # demo still produces *something* readable instead of silently
+        # playing no audio.
+        logger.info("composer LLM returned empty content; using naive joiner.")
+        return _naive_join(signs)
+    return cleaned
 
 
 def _strip_quotes(text: str) -> str:

@@ -17,10 +17,12 @@ from signbridge.space import build_demo
 def main() -> None:
     load_dotenv()
     demo = build_demo()
-    # On HF Spaces the SERVER_NAME env defaults to 0.0.0.0; for local dev we
-    # honour SIGNBRIDGE_HOST (default 127.0.0.1) so the boot test isn't blocked
-    # by sandbox/proxy localhost-accessibility checks.
-    host = os.getenv("SIGNBRIDGE_HOST", "127.0.0.1")
+    # Bind 0.0.0.0 by default — HF Spaces' reverse proxy expects the app to
+    # listen on the container's external interface, and 127.0.0.1-only would
+    # silently reject all incoming requests on the live Space. For local dev
+    # boot-tests inside sandboxes that can't talk to 0.0.0.0, override with
+    # `SIGNBRIDGE_HOST=127.0.0.1`.
+    host = os.getenv("SIGNBRIDGE_HOST", "0.0.0.0")
     port = int(os.getenv("SIGNBRIDGE_PORT", "7860"))
     demo.launch(
         server_name=host,

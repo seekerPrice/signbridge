@@ -133,7 +133,13 @@ def build_demo() -> gr.Blocks:
             "sentence and hear it spoken aloud. Powered by AMD Instinct MI300X."
         )
 
-        state = gr.State(_new_session())
+        # Pass the FACTORY (callable), not the result. Gradio invokes
+        # callable State values once per session — guarantees per-tab
+        # isolation. Using `gr.State(_new_session())` instead would create
+        # a single shared instance at module-load time, which has been
+        # observed to leak state across browser tabs in some Gradio 4.x
+        # configurations.
+        state = gr.State(_new_session)
 
         with gr.Row():
             with gr.Column(scale=3):
