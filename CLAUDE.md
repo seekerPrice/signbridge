@@ -170,7 +170,7 @@ Win the AMD Developer Hackathon (LabLab.ai, May 2026), Track 3, with a real-time
 - HF Hub artifact: `lucas-loo/signbridge-classifier` (trained classifier weights + model card with ROCm training config)
 - License: MIT
 - GitHub mirror: https://github.com/seekerPrice/signbridge
-- HF Space URL: https://huggingface.co/spaces/LucasLooTan/signbridge
+- HF Space URL: https://huggingface.co/spaces/lablab-ai-amd-developer-hackathon/signbridge
 - Submission link: *fill in once started on lablab.ai*
 
 ## Run Commands
@@ -244,7 +244,7 @@ git push huggingface main
 - **Track:** 3 (Vision & Multimodal AI). Extra Challenge (Build in Public) intentionally skipped 2026-05-07.
 - **WLASL dataset:** https://github.com/dxli94/WLASL
 - **MediaPipe Holistic:** https://developers.google.com/mediapipe/solutions/vision/holistic_landmarker
-- **HF Space:** https://huggingface.co/spaces/LucasLooTan/signbridge (deployed 2026-05-07)
+- **HF Space:** https://huggingface.co/spaces/lablab-ai-amd-developer-hackathon/signbridge (moved to event org 2026-05-08)
 - **GitHub mirror:** https://github.com/seekerPrice/signbridge (deployed 2026-05-07)
 - **Submission link:** *fill in once started on lablab.ai*
 - **Plan file:** `/Users/lucaslt/.claude/plans/first-need-to-change-sparkling-dawn.md`
@@ -252,6 +252,8 @@ git push huggingface main
 ---
 
 ## Progress log (newest first)
+
+**2026-05-08 — Fix A: HF Space moved to event org.** Now at `huggingface.co/spaces/lablab-ai-amd-developer-hackathon/signbridge`. Eligible for HF Special Prize ranking. Personal-namespace `LucasLooTan/signbridge` left as-is (will mark private after the hackathon).
 
 **2026-05-07 — GitHub repo + HF Space live.** GitHub: `seekerPrice/signbridge`. HF Space: `LucasLooTan/signbridge` (Gradio SDK 4.44.1, Apache 2.0). All 16 source files mirrored to both. Awaiting AMD Dev Cloud credit email to wire up real VLM endpoint.
 
