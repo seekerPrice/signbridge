@@ -92,5 +92,4 @@ The single-GPU concurrency story is the AMD pitch. This V1 fits on H100;
 the architecture has clear headroom on MI300X for higher-quality V2 models.
 
 ## License
-
 MIT.
