@@ -1,0 +1,120 @@
+"""Llama-3.1-8B sentence composer.
+
+Takes a stream of sign tokens (English glosses + fingerspelled letters)
+and composes a grammatical English sentence. Backed by an OpenAI-compatible
+endpoint — works with AMD Developer Cloud (vLLM), HF Inference, or OpenAI.
+
+ASL is not English-word-by-English-word; it has its own grammar (topic-comment,
+non-manual markers, spatial referents). For V1 we keep this simple: the LLM
+gets a prompt explaining the sign sequence is ASL gloss and asked to render
+it as natural English. Day 2 we may swap in a sign-language-specific model.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+from typing import Sequence
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = """You are SignBridge, a translator from American Sign Language (ASL) gloss to natural spoken English.
+
+You will receive a sequence of ASL signs as a list. Some entries are full ASL signs (e.g. "hello", "name", "thank_you"). Others are individual letters from fingerspelling (uppercase A-Z) — concatenate consecutive letters into spelled-out words.
+
+Rules:
+1. Output ONLY the spoken English sentence. No explanations, no quotation marks, no preamble.
+2. Convert ASL grammar to natural English (e.g. "NAME ME LUCAS" → "My name is Lucas.").
+3. Concatenate consecutive uppercase single letters into a spelled word: ["L","U","C","A","S"] → "Lucas".
+4. If the sequence is incomplete or ambiguous, prefer the most natural plausible English.
+5. Never invent content not implied by the signs.
+6. End with appropriate punctuation."""
+
+
+def _resolve_client() -> tuple[object | None, str]:
+    """Return (client, model_id) based on SIGNBRIDGE_PROVIDER env var."""
+    provider = os.getenv("SIGNBRIDGE_PROVIDER", "amd").lower()
+    composer_model = os.getenv(
+        "SIGNBRIDGE_COMPOSER_MODEL", "meta-llama/Llama-3.1-8B-Instruct"
+    )
+
+    try:
+        from openai import OpenAI  # type: ignore[import-not-found]
+    except ImportError:
+        logger.warning("openai sdk not installed; composer returns naive joiner.")
+        return None, composer_model
+
+    if provider == "amd":
+        base_url = os.getenv("AMD_DEV_CLOUD_BASE_URL", "").rstrip("/")
+        api_key = os.getenv("AMD_DEV_CLOUD_API_KEY", "")
+        if not base_url or not api_key:
+            logger.info("AMD Dev Cloud not configured; falling back to naive joiner.")
+            return None, composer_model
+        return OpenAI(base_url=base_url, api_key=api_key), composer_model
+
+    if provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        if not api_key:
+            logger.info("OPENAI_API_KEY not set; falling back to naive joiner.")
+            return None, composer_model
+        # For local-dev fallback, use a small fast model.
+        return OpenAI(api_key=api_key), os.getenv(
+            "SIGNBRIDGE_COMPOSER_MODEL_OPENAI", "gpt-4o-mini"
+        )
+
+    logger.warning("unknown SIGNBRIDGE_PROVIDER=%r; using naive joiner.", provider)
+    return None, composer_model
+
+
+def _naive_join(signs: Sequence[str]) -> str:
+    """Best-effort fallback: concatenate fingerspelled letters and lowercase glosses."""
+    out: list[str] = []
+    buf: list[str] = []
+    for s in signs:
+        if len(s) == 1 and s.isalpha() and s.isupper():
+            buf.append(s)
+            continue
+        if buf:
+            out.append("".join(buf).capitalize())
+            buf.clear()
+        # turn "thank_you" → "thank you"
+        out.append(s.replace("_", " "))
+    if buf:
+        out.append("".join(buf).capitalize())
+    sentence = " ".join(out).strip()
+    if sentence and sentence[-1] not in ".!?":
+        sentence += "."
+    return sentence[:1].upper() + sentence[1:] if sentence else ""
+
+
+def compose_sentence(signs: Sequence[str]) -> str:
+    """Public entry-point. Returns a single English sentence."""
+    if not signs:
+        return ""
+
+    client, model = _resolve_client()
+    user_prompt = "ASL signs: " + ", ".join(signs)
+
+    if client is None:
+        return _naive_join(signs)
+
+    try:
+        resp = client.chat.completions.create(  # type: ignore[attr-defined]
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            max_tokens=120,
+        )
+        text = resp.choices[0].message.content or ""
+        return _strip_quotes(text.strip())
+    except Exception:  # noqa: BLE001 — broad catch is intentional at the boundary
+        logger.exception("composer LLM call failed; falling back to naive joiner.")
+        return _naive_join(signs)
+
+
+def _strip_quotes(text: str) -> str:
+    return re.sub(r'^["\']|["\']$', "", text).strip()

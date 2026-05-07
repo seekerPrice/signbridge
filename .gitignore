@@ -1,0 +1,38 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Models / large artifacts (we pull from HF Hub at runtime)
+models/
+*.safetensors
+*.bin
+*.gguf
+
+# Logs / traces
+logs/
+traces/
+*.log
+
+# Audio / image cache
+.cache/
+audio_cache/
+frame_cache/
