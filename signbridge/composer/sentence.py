@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from functools import lru_cache
 from typing import Sequence
 
 logger = logging.getLogger(__name__)
@@ -32,18 +33,25 @@ Rules:
 6. End with appropriate punctuation."""
 
 
-def _resolve_client() -> tuple[object | None, str]:
-    """Return (client, model_id) based on SIGNBRIDGE_PROVIDER env var."""
-    provider = os.getenv("SIGNBRIDGE_PROVIDER", "amd").lower()
-    composer_model = os.getenv(
-        "SIGNBRIDGE_COMPOSER_MODEL", "meta-llama/Llama-3.1-8B-Instruct"
-    )
-
+@lru_cache(maxsize=4)
+def _build_client(provider: str, base_url: str, api_key: str, model: str) -> tuple[object | None, str]:
+    """Build (and cache) an OpenAI-compatible client for the given config."""
     try:
         from openai import OpenAI  # type: ignore[import-not-found]
     except ImportError:
         logger.warning("openai sdk not installed; composer returns naive joiner.")
-        return None, composer_model
+        return None, model
+    if base_url:
+        return OpenAI(base_url=base_url, api_key=api_key), model
+    return OpenAI(api_key=api_key), model
+
+
+def _resolve_client() -> tuple[object | None, str]:
+    """Return (cached client, model_id) based on SIGNBRIDGE_PROVIDER env var."""
+    provider = os.getenv("SIGNBRIDGE_PROVIDER", "amd").lower()
+    composer_model = os.getenv(
+        "SIGNBRIDGE_COMPOSER_MODEL", "meta-llama/Llama-3.1-8B-Instruct"
+    )
 
     if provider == "amd":
         base_url = os.getenv("AMD_DEV_CLOUD_BASE_URL", "").rstrip("/")
@@ -51,33 +59,25 @@ def _resolve_client() -> tuple[object | None, str]:
         if not base_url or not api_key:
             logger.info("AMD Dev Cloud not configured; falling back to naive joiner.")
             return None, composer_model
-        return OpenAI(base_url=base_url, api_key=api_key), composer_model
+        return _build_client(provider, base_url, api_key, composer_model)
 
     if provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY", "")
         if not api_key:
             logger.info("OPENAI_API_KEY not set; falling back to naive joiner.")
             return None, composer_model
-        # For local-dev fallback, use a small fast model.
-        return OpenAI(api_key=api_key), os.getenv(
-            "SIGNBRIDGE_COMPOSER_MODEL_OPENAI", "gpt-4o-mini"
-        )
+        model = os.getenv("SIGNBRIDGE_COMPOSER_MODEL_OPENAI", "gpt-4o-mini")
+        return _build_client(provider, "", api_key, model)
 
     if provider == "hf":
         api_key = os.getenv("HF_TOKEN", "")
         if not api_key:
             logger.info("HF_TOKEN not set; falling back to naive joiner.")
             return None, composer_model
-        return (
-            OpenAI(
-                base_url=os.getenv(
-                    "HF_INFERENCE_BASE_URL",
-                    "https://router.huggingface.co/v1",
-                ),
-                api_key=api_key,
-            ),
-            composer_model,
+        base_url = os.getenv(
+            "HF_INFERENCE_BASE_URL", "https://router.huggingface.co/v1"
         )
+        return _build_client(provider, base_url, api_key, composer_model)
 
     logger.warning("unknown SIGNBRIDGE_PROVIDER=%r; using naive joiner.", provider)
     return None, composer_model

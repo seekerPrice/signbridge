@@ -22,6 +22,7 @@ import io
 import logging
 import os
 import re
+from functools import lru_cache
 
 import numpy as np
 
@@ -51,15 +52,28 @@ _PROMPT = (
 )
 
 
-def _resolve_client() -> tuple[object | None, str]:
-    """Return (openai-compat client, model_id) based on SIGNBRIDGE_PROVIDER."""
-    provider = os.getenv("SIGNBRIDGE_PROVIDER", "amd").lower()
+@lru_cache(maxsize=4)
+def _build_client(provider: str, base_url: str, api_key: str, model: str) -> tuple[object | None, str]:
+    """Build (and cache) an OpenAI-compatible client for the given config.
 
+    Cache key includes the full provider tuple so switching providers
+    rebuilds; same provider re-uses the httpx connection pool. The
+    `(None, model)` return is cached too — once a missing-deps state is
+    detected we don't re-import on every frame.
+    """
     try:
         from openai import OpenAI  # type: ignore[import-not-found]
     except ImportError:
         logger.warning("openai sdk not installed; recognizer returns 'unknown'.")
-        return None, DEFAULT_VLM_MODEL
+        return None, model
+    if base_url:
+        return OpenAI(base_url=base_url, api_key=api_key), model
+    return OpenAI(api_key=api_key), model
+
+
+def _resolve_client() -> tuple[object | None, str]:
+    """Return (cached client, model_id) based on SIGNBRIDGE_PROVIDER env var."""
+    provider = os.getenv("SIGNBRIDGE_PROVIDER", "amd").lower()
 
     if provider == "amd":
         base_url = os.getenv("AMD_DEV_CLOUD_BASE_URL", "").rstrip("/")
@@ -67,37 +81,28 @@ def _resolve_client() -> tuple[object | None, str]:
         if not base_url or not api_key:
             logger.info("AMD Dev Cloud not configured; recognizer in stub mode.")
             return None, DEFAULT_VLM_MODEL
-        return OpenAI(base_url=base_url, api_key=api_key), DEFAULT_VLM_MODEL
+        return _build_client(provider, base_url, api_key, DEFAULT_VLM_MODEL)
 
     if provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY", "")
         if not api_key:
             logger.info("OPENAI_API_KEY not set; recognizer in stub mode.")
             return None, DEFAULT_VLM_MODEL
-        return OpenAI(api_key=api_key), os.getenv(
-            "SIGNBRIDGE_VLM_MODEL_OPENAI", "gpt-4o-mini"
-        )
+        model = os.getenv("SIGNBRIDGE_VLM_MODEL_OPENAI", "gpt-4o-mini")
+        return _build_client(provider, "", api_key, model)
 
     if provider == "hf":
         api_key = os.getenv("HF_TOKEN", "")
         if not api_key:
             logger.info("HF_TOKEN not set; recognizer in stub mode.")
             return None, DEFAULT_VLM_MODEL
-        # HF Inference Providers — OpenAI-compatible router serving Qwen2-VL,
-        # Llama-3.2-Vision, etc. via Together/Fireworks/Hyperbolic backends.
-        return (
-            OpenAI(
-                base_url=os.getenv(
-                    "HF_INFERENCE_BASE_URL",
-                    "https://router.huggingface.co/v1",
-                ),
-                api_key=api_key,
-            ),
-            os.getenv(
-                "SIGNBRIDGE_VLM_MODEL_HF",
-                "meta-llama/Llama-3.2-11B-Vision-Instruct",
-            ),
+        base_url = os.getenv(
+            "HF_INFERENCE_BASE_URL", "https://router.huggingface.co/v1"
         )
+        model = os.getenv(
+            "SIGNBRIDGE_VLM_MODEL_HF", "meta-llama/Llama-3.2-11B-Vision-Instruct"
+        )
+        return _build_client(provider, base_url, api_key, model)
 
     logger.warning("unknown SIGNBRIDGE_PROVIDER=%r; recognizer in stub mode.", provider)
     return None, DEFAULT_VLM_MODEL
