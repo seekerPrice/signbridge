@@ -14,23 +14,13 @@ from pathlib import Path
 
 import numpy as np
 
+# Vocabulary imported from the shared module — must match the order the
+# trained classifier head was trained against.
+from signbridge.vocab import VOCAB
+
 logger = logging.getLogger(__name__)
 
-# WLASL Top-50 + ASL fingerspelling alphabet + digits 0-9.
-# Exact list will be finalised when we lock training data on Day 2.
-VOCABULARY: list[str] = [
-    # ASL fingerspelling
-    *list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-    *list("0123456789"),
-    # WLASL Top-50 (approximate; exact set fixed by the dataset slice)
-    "hello", "thank_you", "name", "please", "sorry", "yes", "no", "good",
-    "bad", "help", "want", "like", "love", "family", "friend", "mother",
-    "father", "sister", "brother", "child", "home", "school", "work",
-    "eat", "drink", "water", "food", "more", "finish", "today", "tomorrow",
-    "yesterday", "where", "what", "who", "why", "when", "how", "go", "come",
-    "see", "know", "understand", "think", "feel", "happy", "sad", "tired",
-    "hungry", "wait",
-]
+VOCABULARY = list(VOCAB)
 VOCAB_SIZE = len(VOCABULARY)
 
 

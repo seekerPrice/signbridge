@@ -25,27 +25,15 @@ import re
 
 import numpy as np
 
+# Closed vocabulary the VLM is asked to choose from. Imported from the
+# shared `signbridge.vocab` module so the recognizer and the trained
+# classifier (`signbridge.recognizer.classifier`) can never drift.
+from signbridge.vocab import VOCAB_PROMPT_LITERAL as _VLM_VOCAB
+from signbridge.vocab import VOCAB_SET as _VLM_VOCAB_SET
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_VLM_MODEL = os.getenv("SIGNBRIDGE_VLM_MODEL", "Qwen/Qwen2-VL-7B-Instruct")
-
-# Closed vocabulary the VLM is asked to choose from. Same shape as
-# `classifier.VOCABULARY` but expressed as a prompt, not a softmax.
-_VLM_VOCAB = (
-    "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z "
-    "0 1 2 3 4 5 6 7 8 9 "
-    "hello thank_you name please sorry yes no good bad help "
-    "want like love family friend mother father sister brother child "
-    "home school work eat drink water food more finish today tomorrow "
-    "yesterday where what who why when how go come "
-    "see know understand think feel happy sad tired hungry wait "
-    "unknown"
-)
-# Pre-built set for membership tests at recognition time. Tokens not in this
-# set get suppressed (confidence 0.0) — VLMs hallucinate strings like
-# "letter", "no_sign", "n/a" that would otherwise leak into the demo with a
-# fake 0.85 confidence.
-_VLM_VOCAB_SET = frozenset(_VLM_VOCAB.split())
 
 _PROMPT = (
     "You are an expert in American Sign Language (ASL). Look at this image of a "
