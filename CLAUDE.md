@@ -12,6 +12,105 @@ Loaded when the working directory is inside `/Users/lucaslt/Documents/side-gig/a
 
 ---
 
+## Competition requirements (authoritative)
+
+> Snapshot of the official AMD Developer Hackathon rules, captured 2026-05-08 from https://lablab.ai/ai-hackathons/amd-developer. **Read-only — never edit. If the lablab page changes, re-snapshot the entire section.**
+
+### Hackathon: AMD Developer Hackathon (lablab.ai · sponsored by AMD + Akash Systems · partners: Hugging Face, Qwen)
+
+### Hard deadlines (Malaysia Time)
+
+| Event | Date / time |
+|---|---|
+| Hackathon kick-off | 2026-05-05 00:00 MYT |
+| On-site (SF, by invitation only) | 2026-05-09 17:00 MYT → 2026-05-10 03:00 MYT |
+| Online build phase | open since kick-off |
+| **Submission deadline** | **2026-05-11 03:00 MYT** |
+| Live on-stage pitching (on-site only) | 2026-05-11 05:00 MYT |
+
+### Targeted track: Track 3 — Vision & Multimodal AI
+
+Verbatim from the lablab page:
+- **Objective:** Build applications that process and understand multiple data types (Images, Video, Audio) using the massive memory bandwidth of AMD GPUs.
+- **What to Build:** High-throughput industrial inspection, medical imaging analysis, or multimodal conversational assistants.
+- **Tech Stack:** Multimodal models (like Llama 3.2 Vision, Qwen-VL) optimized for ROCm.
+- **Compute Resource:** Access to AMD Instinct MI300X instances via AMD Developer Cloud.
+
+### Submission flow (Hugging Face partnership)
+
+Verbatim from lablab page → "Technology Partners & Workshops" → Hugging Face section:
+1. Find a model on Hugging Face Hub to work with.
+2. Build or fine-tune it using your AMD Developer Cloud credits.
+3. **Publish your completed project as a Hugging Face Space within the event organization** — `lablab-ai-amd-developer-hackathon`.
+4. Submit your Space link on lablab when you submit your project.
+
+> Lucas joined the org and the Space lives at `huggingface.co/spaces/lablab-ai-amd-developer-hackathon/signbridge` (or will, once Fix A lands). Personal-namespace Spaces are NOT eligible for the HF Special Prize.
+
+### Required submission deliverables (verbatim from "What to submit?")
+
+**Basic Information:**
+1. Project Title
+2. Short Description
+3. Long Description
+4. Technology & Category Tags
+
+**Cover Image and Presentation:**
+5. Cover Image
+6. Video Presentation
+7. Slide Presentation
+
+**App Hosting & Code Repository:**
+8. Public GitHub Repository
+9. Demo Application Platform (= Hugging Face Space)
+10. Application URL
+
+### Judging criteria (verbatim)
+
+| Criterion | Definition |
+|---|---|
+| **Application of Technology** | How effectively the chosen model(s) are integrated into the solution. |
+| **Presentation** | The clarity and effectiveness of the project presentation. |
+| **Business Value** | The impact and practical value, considering how well it fits into business areas. |
+| **Originality** | The uniqueness & creativity of the solution, highlighting approaches and ability to demonstrate behaviors. |
+
+### Prize structure (verbatim from "Prizes")
+
+- **Total prize pool: $21,500+**, sponsored by AMD and Akash Systems, plus an AMD hardware reward and exclusive Hugging Face prizes.
+- 🏆 **Grand Prize: $5,000** — overall top project.
+- **Exclusive Hardware Reward:** AMD Radeon AI PRO R9700 GPU — awarded for outstanding social engagement or project promotion.
+- 🎨 **Track 3 — Vision & Multimodal AI**: 1st $2,500 · 2nd $1,500 · 3rd $1,000.
+- 🤖 Track 1 — AI Agents & Agentic Workflows: same tier.
+- ⚡ Track 2 — Fine-Tuning on AMD GPUs: same tier.
+- 🤗 **Hugging Face Special Prize** (Space with the most likes in the event org):
+  - 1st: 1 Reachy Mini Wireless + 6 months Hugging Face PRO + $500 Hugging Face Credits.
+  - 2nd: 3 months Hugging Face PRO + $300 Hugging Face Credits.
+  - 3rd: 2 months Hugging Face PRO + $200 Hugging Face Credits.
+
+### Prize targets for SignBridge
+
+- 🥇 **Track 3** (primary).
+- 🤗 **HF Special Prize** (most likes — requires Space in event org + sharing the link).
+- 🏆 Grand Prize (aspirational).
+- ❌ Build-in-Public extra: **dropped** by user direction 2026-05-07 (no tweet obligations; walkthrough kept as internal doc only).
+
+### License rule
+
+Per the Voluntary Participation & Prize Terms footer: *"Submissions must be original and MIT-compliant."* SignBridge ships under **MIT License** (originally drafted as Apache 2.0 — switched 2026-05-08 to satisfy the literal reading of "MIT-compliant").
+
+### Tech stack constraints (per Track 3)
+
+- **Compute:** AMD Instinct MI300X via AMD Developer Cloud (datacenter GPU, 192 GB HBM3, 5.3 TB/s memory bandwidth). Not Ryzen, not Radeon Pro — those are different AMD product lines.
+- **Models:** Multimodal models optimized for ROCm. Examples called out by the rules: Llama 3.2 Vision, Qwen-VL family. SignBridge uses `Qwen/Qwen3-VL-8B-Instruct` (Qwen-VL family ✓) for sign recognition + `meta-llama/Llama-3.1-8B-Instruct` for sentence composition + `coqui/XTTS-v2` for speech.
+- **Frameworks:** ROCm + PyTorch + Hugging Face Optimum-AMD + vLLM (per the rules).
+
+### Workshop references (provided by AMD)
+
+- "Build and Deploy an AI App on AMD MI300X as a Hugging Face Space" — Steve Kimoi, lablab.ai
+- "Getting Started on AMD Developer Cloud" — Maharshi Trivedi, AMD
+- "AI Agents 101: Building AI Agents with MCP & Open-Source Inference" — Mahdi Ghodsi, AMD
+
+---
+
 ## Status
 
 Day 1 / ~4 — pivoted from Iris to SignBridge on 2026-05-07. **Submission deadline: 2026-05-11 03:00 MYT.** ~3.5 days remaining. AMD Developer Hackathon, **Track 3 — Vision & Multimodal AI** (only — Build-in-Public dropped 2026-05-07). Currently scaffolding + Day 1 hello-world.
