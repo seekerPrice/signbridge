@@ -29,7 +29,10 @@ import numpy as np
 # Closed vocabulary the VLM is asked to choose from. Imported from the
 # shared `signbridge.vocab` module so the recognizer and the trained
 # classifier (`signbridge.recognizer.classifier`) can never drift.
-from signbridge.recognizer.prompts import build_single_frame_prompt
+from signbridge.recognizer.prompts import (
+    build_multi_frame_prompt,
+    build_single_frame_prompt,
+)
 from signbridge.vocab import VOCAB_SET as _VLM_VOCAB_SET
 
 logger = logging.getLogger(__name__)
@@ -157,6 +160,54 @@ def recognize_sign_from_frame(frame: np.ndarray) -> tuple[str, float]:
     # Suppress any token that isn't in the closed vocabulary the prompt
     # explicitly requested. Without this, a VLM that returns "letter" or
     # "no_sign" would be reported as a confident prediction.
+    if token in {"", "unknown"} or token not in _VLM_VOCAB_SET:
+        return "", 0.0
+    return token, 0.85
+
+
+def recognize_sign_from_frames(frames: list[np.ndarray]) -> tuple[str, float]:
+    """Run the VLM on an ordered sequence of frames (multi-image prompt).
+
+    Returns (token, confidence). Confidence semantics match the single-frame
+    path: 0.85 when the VLM emits an in-vocab token, 0.0 otherwise.
+
+    Raises:
+        ValueError: if fewer than 2 frames are supplied (use the single-frame
+            entry point for one frame).
+    """
+    if len(frames) < 2:
+        raise ValueError(
+            f"recognize_sign_from_frames requires at least 2 frames, got {len(frames)}"
+        )
+
+    client, model = _resolve_client()
+    if client is None:
+        return "", 0.0
+
+    prompt = build_multi_frame_prompt(len(frames))
+    content: list[dict[str, object]] = [{"type": "text", "text": prompt}]
+    for frame in frames:
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": _frame_to_data_url(frame)},
+            }
+        )
+
+    try:
+        resp = client.chat.completions.create(  # type: ignore[attr-defined]
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            temperature=0.0,
+            max_tokens=10,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+        token = _normalise(raw)
+    except Exception as exc:  # noqa: BLE001 — broad at the boundary on purpose
+        # Same credential-leak guard as the single-frame path.
+        logger.warning("multi-frame VLM recognition failed: %s", type(exc).__name__)
+        return "", 0.0
+
     if token in {"", "unknown"} or token not in _VLM_VOCAB_SET:
         return "", 0.0
     return token, 0.85

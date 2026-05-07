@@ -152,3 +152,99 @@ class TestRecognizeSignFromFrame:
         token, conf = recognize_sign_from_frame(frame)
         assert token == ""
         assert conf == 0.0
+
+
+class TestRecognizeSignFromFrames:
+    def test_too_few_frames_raises(self):
+        from signbridge.recognizer.vlm import recognize_sign_from_frames
+
+        with pytest.raises(ValueError):
+            recognize_sign_from_frames([])
+        with pytest.raises(ValueError):
+            recognize_sign_from_frames([np.zeros((32, 32, 3), dtype=np.uint8)])
+
+    def test_no_client_returns_empty(self):
+        from signbridge.recognizer.vlm import recognize_sign_from_frames
+
+        frames = [np.full((32, 32, 3), 200, dtype=np.uint8) for _ in range(4)]
+        token, conf = recognize_sign_from_frames(frames)
+        assert token == ""
+        assert conf == 0.0
+
+    def test_with_mock_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from signbridge.recognizer import vlm
+
+        captured: dict = {}
+
+        class _FakeChoice:
+            def __init__(self, content: str) -> None:
+                self.message = type("M", (), {"content": content})()
+
+        class _FakeResp:
+            def __init__(self, content: str) -> None:
+                self.choices = [_FakeChoice(content)]
+
+        class _FakeClient:
+            class chat:  # noqa: N801
+                class completions:  # noqa: N801
+                    @staticmethod
+                    def create(**kwargs: object) -> _FakeResp:
+                        captured.update(kwargs)
+                        return _FakeResp("hello")
+
+        monkeypatch.setattr(vlm, "_resolve_client", lambda: (_FakeClient(), "test"))
+        frames = [np.full((32, 32, 3), 100 + i, dtype=np.uint8) for i in range(4)]
+        token, conf = vlm.recognize_sign_from_frames(frames)
+        assert token == "hello"
+        assert conf == 0.85
+        # Verify multi-image payload shape: 1 message with 1 text + 4 image_urls
+        msgs = captured["messages"]
+        assert len(msgs) == 1
+        content = msgs[0]["content"]
+        assert sum(1 for c in content if c["type"] == "text") == 1
+        assert sum(1 for c in content if c["type"] == "image_url") == 4
+
+    def test_off_vocab_token_suppressed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from signbridge.recognizer import vlm
+
+        class _FakeClient:
+            class chat:  # noqa: N801
+                class completions:  # noqa: N801
+                    @staticmethod
+                    def create(**_: object) -> object:
+                        return type(
+                            "R",
+                            (),
+                            {
+                                "choices": [
+                                    type(
+                                        "C",
+                                        (),
+                                        {"message": type("M", (), {"content": "fingerspelling"})()},
+                                    )()
+                                ]
+                            },
+                        )()
+
+        monkeypatch.setattr(vlm, "_resolve_client", lambda: (_FakeClient(), "test"))
+        frames = [np.full((32, 32, 3), 100, dtype=np.uint8) for _ in range(4)]
+        token, conf = vlm.recognize_sign_from_frames(frames)
+        # 'fingerspelling' is not in VOCAB_SET → suppressed
+        assert token == ""
+        assert conf == 0.0
+
+    def test_provider_failure_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from signbridge.recognizer import vlm
+
+        class _FailingClient:
+            class chat:  # noqa: N801
+                class completions:  # noqa: N801
+                    @staticmethod
+                    def create(**_: object) -> object:
+                        raise RuntimeError("boom")
+
+        monkeypatch.setattr(vlm, "_resolve_client", lambda: (_FailingClient(), "test"))
+        frames = [np.full((32, 32, 3), 0, dtype=np.uint8) for _ in range(3)]
+        token, conf = vlm.recognize_sign_from_frames(frames)
+        assert token == ""
+        assert conf == 0.0
