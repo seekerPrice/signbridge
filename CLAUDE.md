@@ -168,7 +168,7 @@ Win the AMD Developer Hackathon (LabLab.ai, May 2026), Track 3, with a real-time
   - **(Stretch) STT:** `openai/whisper-large-v3` → reverse direction (speech → on-screen text)
 - Datasets: [WLASL](https://github.com/dxli94/WLASL) Top-100 subset + ASL fingerspelling alphabet (open)
 - HF Hub artifact: `lucas-loo/signbridge-classifier` (trained classifier weights + model card with ROCm training config)
-- License: Apache 2.0
+- License: MIT
 - GitHub mirror: https://github.com/seekerPrice/signbridge
 - HF Space URL: https://huggingface.co/spaces/LucasLooTan/signbridge
 - Submission link: *fill in once started on lablab.ai*

@@ -7,7 +7,7 @@ sdk: gradio
 sdk_version: 4.44.0
 app_file: app.py
 pinned: false
-license: apache-2.0
+license: mit
 short_description: Real-time ASL → English speech on AMD MI300X.
 ---
 
@@ -83,7 +83,7 @@ python -m signbridge.scripts.train_classifier --dataset data/wlasl --epochs 30
 
 ## License
 
-Apache 2.0. See [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
 
 ## Status
 

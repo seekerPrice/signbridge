@@ -93,4 +93,4 @@ the architecture has clear headroom on MI300X for higher-quality V2 models.
 
 ## License
 
-Apache 2.0.
+MIT.
