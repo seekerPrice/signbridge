@@ -32,6 +32,46 @@ logger = logging.getLogger(__name__)
 RECOGNIZER_MODE = os.getenv("SIGNBRIDGE_RECOGNIZER_MODE", "vlm").lower()
 
 
+def _sample_frames_from_video(video_path: str | None, n_frames: int = 4) -> list:
+    """Open a video file and return n_frames evenly-spaced RGB frames.
+
+    Returns [] if the file is missing or unreadable. Frames are RGB
+    np.ndarray (HxWx3, uint8). Imports OpenCV lazily so the Gradio
+    module still loads on machines without it.
+    """
+    if not video_path:
+        return []
+    try:
+        import cv2  # type: ignore[import-not-found]
+    except ImportError:
+        logger.warning(
+            "opencv-python-headless not installed; cannot sample video frames."
+        )
+        return []
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return []
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total <= 0:
+        cap.release()
+        return []
+    indices = [
+        int(round(i * (total - 1) / (n_frames - 1))) if n_frames > 1 else 0
+        for i in range(n_frames)
+    ]
+    frames: list = []
+    for idx in indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ok, frame_bgr = cap.read()
+        if not ok:
+            continue
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        frames.append(frame_rgb)
+    cap.release()
+    return frames
+
+
 @dataclass
 class _SessionState:
     """Per-tab state. Gradio creates one per browser session."""
@@ -128,9 +168,9 @@ def build_demo() -> gr.Blocks:
     with gr.Blocks(title="SignBridge", theme=gr.themes.Soft()) as demo:
         gr.Markdown(
             "# 🤟 SignBridge — real-time ASL → English speech\n"
-            "Two people who couldn't communicate, now can. Sign into the webcam, "
-            "press **Capture sign** to add it, then **Speak** to compose your "
-            "sentence and hear it spoken aloud. Powered by AMD Instinct MI300X."
+            "Two people who couldn't communicate, now can. **Snapshot** for "
+            "fingerspelled letters; **Record sign** for full ASL words "
+            "(motion-dependent). Powered by AMD Instinct MI300X."
         )
 
         # Pass the FACTORY (callable), not the result. Gradio invokes
@@ -141,44 +181,120 @@ def build_demo() -> gr.Blocks:
         # configurations.
         state = gr.State(_new_session)
 
-        with gr.Row():
-            with gr.Column(scale=3):
-                webcam = gr.Image(
+        with gr.Tabs():
+            with gr.Tab("Snapshot — fingerspelling"):
+                with gr.Row():
+                    with gr.Column(scale=3):
+                        webcam = gr.Image(
+                            sources=["webcam"],
+                            streaming=True,
+                            label="Sign here",
+                            height=420,
+                            type="numpy",
+                        )
+                        with gr.Row():
+                            capture_btn = gr.Button(
+                                "✋ Capture sign", variant="primary", size="lg"
+                            )
+                            clear_btn = gr.Button("🧹 Clear", variant="secondary")
+                        latest = gr.Markdown(value="")
+
+                    with gr.Column(scale=2):
+                        history = gr.Markdown(
+                            value=_format_history([]), label="Captured signs"
+                        )
+                        speak_btn = gr.Button("🔊 Speak", variant="primary", size="lg")
+                        sentence_box = gr.Textbox(
+                            label="Composed sentence",
+                            interactive=False,
+                            lines=3,
+                        )
+                        audio_out = gr.Audio(label="Spoken response", autoplay=True)
+                        gr.Markdown(
+                            "**Tip:** for V1, try the ASL fingerspelling alphabet (A–Z, 0–9) "
+                            "or one of the WLASL Top-50 signs (`hello`, `thank_you`, `name`, "
+                            "`please`, `sorry`, `family`, `eat`, `drink`, `home`, `love`, …). "
+                            "Spell out a word letter-by-letter, then press Speak."
+                        )
+
+                with gr.Accordion("Pose tracking (debug)", open=False):
+                    pose_view = gr.Image(
+                        label="MediaPipe Holistic landmarks", height=320
+                    )
+                    pose_btn = gr.Button("Show pose for current frame")
+                    pose_btn.click(
+                        fn=_show_landmarks,
+                        inputs=[webcam],
+                        outputs=[pose_view],
+                    )
+
+                capture_btn.click(
+                    fn=_capture_sign,
+                    inputs=[webcam, state],
+                    outputs=[latest, history, state],
+                )
+                speak_btn.click(
+                    fn=_speak,
+                    inputs=[state],
+                    outputs=[sentence_box, audio_out, state],
+                )
+                clear_btn.click(
+                    fn=_clear,
+                    inputs=[state],
+                    outputs=[latest, history, sentence_box, audio_out, state],
+                )
+
+            with gr.Tab("Record sign — full ASL words"):
+                gr.Markdown(
+                    "Record 1.5–2 s of yourself signing a full ASL word "
+                    "(`hello`, `thank_you`, `please`, `eat`, `drink`, …). "
+                    "The recognizer samples 4 frames from the clip and uses "
+                    "motion across them to decide."
+                )
+                video_in = gr.Video(
                     sources=["webcam"],
-                    streaming=True,
-                    label="Sign here",
+                    label="Hold while signing",
                     height=420,
-                    type="numpy",
                 )
                 with gr.Row():
-                    capture_btn = gr.Button("✋ Capture sign", variant="primary", size="lg")
-                    clear_btn = gr.Button("🧹 Clear", variant="secondary")
-                latest = gr.Markdown(value="")
+                    submit_video_btn = gr.Button(
+                        "🎬 Submit recording",
+                        variant="primary",
+                        size="lg",
+                    )
+                video_status = gr.Markdown(value="")
 
-            with gr.Column(scale=2):
-                history = gr.Markdown(value=_format_history([]), label="Captured signs")
-                speak_btn = gr.Button("🔊 Speak", variant="primary", size="lg")
-                sentence_box = gr.Textbox(
-                    label="Composed sentence",
-                    interactive=False,
-                    lines=3,
-                )
-                audio_out = gr.Audio(label="Spoken response", autoplay=True)
-                gr.Markdown(
-                    "**Tip:** for V1, try the ASL fingerspelling alphabet (A–Z, 0–9) "
-                    "or one of the WLASL Top-50 signs (`hello`, `thank_you`, `name`, "
-                    "`please`, `sorry`, `family`, `eat`, `drink`, `home`, `love`, …). "
-                    "Spell out a word letter-by-letter, then press Speak."
-                )
+                def _handle_video(
+                    video_path: str | None, sess: _SessionState
+                ) -> tuple[str, str, _SessionState]:
+                    frames = _sample_frames_from_video(video_path, n_frames=4)
+                    if len(frames) < 2:
+                        return (
+                            "_couldn't read enough frames — try recording again_",
+                            _format_history(sess.sign_history),
+                            sess,
+                        )
+                    from signbridge.recognizer.vlm import recognize_sign_from_frames
 
-        with gr.Accordion("Pose tracking (debug)", open=False):
-            pose_view = gr.Image(label="MediaPipe Holistic landmarks", height=320)
-            pose_btn = gr.Button("Show pose for current frame")
-            pose_btn.click(
-                fn=_show_landmarks,
-                inputs=[webcam],
-                outputs=[pose_view],
-            )
+                    token, confidence = recognize_sign_from_frames(frames)
+                    if not token or confidence < 0.5:
+                        return (
+                            "_couldn't recognise that one — try slower, plain background_",
+                            _format_history(sess.sign_history),
+                            sess,
+                        )
+                    sess.sign_history.append(token)
+                    return (
+                        f"detected: **{token}** ({confidence:.0%})",
+                        _format_history(sess.sign_history),
+                        sess,
+                    )
+
+                submit_video_btn.click(
+                    fn=_handle_video,
+                    inputs=[video_in, state],
+                    outputs=[video_status, history, state],
+                )
 
         with gr.Accordion("System info", open=False):
             gr.Markdown(
@@ -189,21 +305,5 @@ def build_demo() -> gr.Blocks:
                 f"- **Composer model:** `{os.getenv('SIGNBRIDGE_COMPOSER_MODEL', 'meta-llama/Llama-3.1-8B-Instruct')}`\n"
                 f"- **TTS model:** `{os.getenv('SIGNBRIDGE_TTS_MODEL', 'tts_models/multilingual/multi-dataset/xtts_v2')}`\n"
             )
-
-        capture_btn.click(
-            fn=_capture_sign,
-            inputs=[webcam, state],
-            outputs=[latest, history, state],
-        )
-        speak_btn.click(
-            fn=_speak,
-            inputs=[state],
-            outputs=[sentence_box, audio_out, state],
-        )
-        clear_btn.click(
-            fn=_clear,
-            inputs=[state],
-            outputs=[latest, history, sentence_box, audio_out, state],
-        )
 
     return demo
