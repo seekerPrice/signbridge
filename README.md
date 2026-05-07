@@ -7,6 +7,7 @@ sdk: gradio
 sdk_version: 4.44.0
 app_file: app.py
 pinned: false
+thumbnail: assets/cover.png
 license: mit
 short_description: Real-time ASL → English speech on AMD MI300X.
 ---

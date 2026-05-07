@@ -229,6 +229,8 @@ git push huggingface main
 │       └── train_classifier.py     # WLASL training script
 ├── data/
 │   └── wlasl/                      # gitignored — WLASL Top-100 dataset
+├── assets/
+│   └── cover.png                   # 1280×640 HF Space + lablab cover
 ├── tests/
 │   └── golden/                     # 30-sample gold set (Top-50 + alphabet)
 └── docs/
