@@ -63,6 +63,22 @@ def _resolve_client() -> tuple[object | None, str]:
             "SIGNBRIDGE_COMPOSER_MODEL_OPENAI", "gpt-4o-mini"
         )
 
+    if provider == "hf":
+        api_key = os.getenv("HF_TOKEN", "")
+        if not api_key:
+            logger.info("HF_TOKEN not set; falling back to naive joiner.")
+            return None, composer_model
+        return (
+            OpenAI(
+                base_url=os.getenv(
+                    "HF_INFERENCE_BASE_URL",
+                    "https://router.huggingface.co/v1",
+                ),
+                api_key=api_key,
+            ),
+            composer_model,
+        )
+
     logger.warning("unknown SIGNBRIDGE_PROVIDER=%r; using naive joiner.", provider)
     return None, composer_model
 

@@ -15,17 +15,16 @@ Endpoints:
 from __future__ import annotations
 
 import base64
-import io
 import logging
 import os
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from PIL import Image
 from pydantic import BaseModel, Field
 
 from signbridge.composer.sentence import compose_sentence
+from signbridge.imageio import load_rgb
 from signbridge.recognizer.vlm import recognize_sign_from_frame
 from signbridge.voice.tts import synthesize_speech
 
@@ -69,7 +68,7 @@ def _decode_b64_image(b64: str) -> np.ndarray:
         if b64.startswith("data:"):
             b64 = b64.split(",", 1)[1]
         raw = base64.b64decode(b64)
-        return np.asarray(Image.open(io.BytesIO(raw)).convert("RGB"))
+        return load_rgb(raw)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"bad frame: {exc}") from exc
 

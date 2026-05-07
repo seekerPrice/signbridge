@@ -90,15 +90,20 @@ def _resolve_client() -> tuple[object | None, str]:
         if not api_key:
             logger.info("HF_TOKEN not set; recognizer in stub mode.")
             return None, DEFAULT_VLM_MODEL
+        # HF Inference Providers — OpenAI-compatible router serving Qwen2-VL,
+        # Llama-3.2-Vision, etc. via Together/Fireworks/Hyperbolic backends.
         return (
             OpenAI(
                 base_url=os.getenv(
                     "HF_INFERENCE_BASE_URL",
-                    "https://api-inference.huggingface.co/v1",
+                    "https://router.huggingface.co/v1",
                 ),
                 api_key=api_key,
             ),
-            DEFAULT_VLM_MODEL,
+            os.getenv(
+                "SIGNBRIDGE_VLM_MODEL_HF",
+                "meta-llama/Llama-3.2-11B-Vision-Instruct",
+            ),
         )
 
     logger.warning("unknown SIGNBRIDGE_PROVIDER=%r; recognizer in stub mode.", provider)
@@ -108,7 +113,10 @@ def _resolve_client() -> tuple[object | None, str]:
 def _frame_to_data_url(frame: np.ndarray) -> str:
     from PIL import Image
 
-    img = Image.fromarray(frame)
+    from signbridge.imageio import array_to_rgb
+
+    rgb = array_to_rgb(frame)
+    img = Image.fromarray(rgb)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=85)
     b64 = base64.b64encode(buf.getvalue()).decode("ascii")

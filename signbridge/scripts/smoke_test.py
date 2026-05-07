@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 
 from signbridge.composer.sentence import compose_sentence
+from signbridge.imageio import load_rgb
 from signbridge.recognizer.vlm import recognize_sign_from_frame
 from signbridge.voice.tts import synthesize_speech
 
@@ -95,7 +96,7 @@ def main() -> int:
 
     _step("VLM recognizer (sign-frame → token)")
     if args.frame:
-        img = np.asarray(Image.open(args.frame).convert("RGB"))
+        img = load_rgb(args.frame)
         print(f"  using real frame: {args.frame} ({img.shape})")
     else:
         img = _make_synthetic_frame()

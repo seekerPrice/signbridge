@@ -29,10 +29,9 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
 from dotenv import load_dotenv
-from PIL import Image
 
+from signbridge.imageio import load_rgb
 from signbridge.recognizer.vlm import recognize_sign_from_frame
 
 VALID_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -87,7 +86,7 @@ def main() -> int:
     t_start = time.perf_counter()
     for expected, path in samples:
         per_class_total[expected] += 1
-        img = np.asarray(Image.open(path).convert("RGB"))
+        img = load_rgb(path)
         t0 = time.perf_counter()
         predicted, confidence = recognize_sign_from_frame(img)
         dt_ms = (time.perf_counter() - t0) * 1000
