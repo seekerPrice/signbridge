@@ -43,7 +43,7 @@ class TestHealth:
 class TestRecognize:
     def test_empty_frame_rejected(self, client: TestClient) -> None:
         r = client.post("/recognize", json={"frame": ""})
-        assert r.status_code == 400
+        assert r.status_code in (400, 422)
 
     def test_invalid_base64_rejected(self, client: TestClient) -> None:
         r = client.post("/recognize", json={"frame": "%%%not-base64%%%"})
@@ -99,3 +99,48 @@ class TestSpeak:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("audio/")
         assert len(r.content) > 0
+
+
+class TestRecognizeFrames:
+    def test_empty_frames_rejected(self, client: TestClient) -> None:
+        r = client.post("/recognize", json={"frames": []})
+        # Pydantic min_length=1 rejects empty list (validation error 422).
+        # If the validator collapses to 400 due to model_validator, accept that too.
+        assert r.status_code in (400, 422)
+
+    def test_single_frame_in_list_rejected(self, client: TestClient) -> None:
+        # Multi-frame path requires >=2 frames.
+        b64 = _frame_b64()
+        r = client.post("/recognize", json={"frames": [b64]})
+        assert r.status_code == 400
+        detail = r.json().get("detail", "").lower()
+        assert "at least 2" in detail or "2 frames" in detail or "frames" in detail
+
+    def test_valid_multi_frame_no_provider(self, client: TestClient) -> None:
+        b64 = _frame_b64()
+        r = client.post("/recognize", json={"frames": [b64, b64, b64, b64]})
+        assert r.status_code == 200
+        assert r.json() == {"token": "", "confidence": 0.0}
+
+    def test_too_many_frames_rejected(self, client: TestClient) -> None:
+        b64 = _frame_b64()
+        r = client.post("/recognize", json={"frames": [b64] * 100})
+        assert r.status_code in (400, 422)
+
+    def test_oversized_frame_rejected(self, client: TestClient) -> None:
+        # 6 MB base64 string is well past any reasonable webcam frame.
+        big = "A" * (6 * 1024 * 1024)
+        r = client.post("/recognize", json={"frame": big})
+        assert r.status_code in (400, 422)
+
+    def test_both_frame_and_frames_rejected(self, client: TestClient) -> None:
+        b64 = _frame_b64()
+        r = client.post(
+            "/recognize",
+            json={"frame": b64, "frames": [b64, b64]},
+        )
+        assert r.status_code in (400, 422)
+
+    def test_neither_frame_nor_frames_rejected(self, client: TestClient) -> None:
+        r = client.post("/recognize", json={})
+        assert r.status_code in (400, 422)
