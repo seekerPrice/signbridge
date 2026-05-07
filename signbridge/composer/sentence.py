@@ -110,7 +110,9 @@ def compose_sentence(signs: Sequence[str]) -> str:
         return ""
 
     client, model = _resolve_client()
-    user_prompt = "ASL signs: " + ", ".join(signs)
+    # System prompt examples use Python-list syntax (e.g. ["L","U","C","A","S"]);
+    # match that format here so the LLM sees inputs and examples consistently.
+    user_prompt = f"ASL signs: {list(signs)!r}"
 
     if client is None:
         return _naive_join(signs)

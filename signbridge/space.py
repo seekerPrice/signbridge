@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 
 import gradio as gr
@@ -108,13 +109,22 @@ def _recognize(frame: np.ndarray) -> tuple[str, float]:
 
 
 _extractor_singleton: LandmarkExtractor | None = None
+_extractor_lock = threading.Lock()
 
 
 def _shared_extractor() -> LandmarkExtractor:
+    """Return the lazy-loaded MediaPipe Holistic extractor.
+
+    Double-checked locking so concurrent first-call requests under
+    Gradio's worker threads don't race and build two extractors.
+    """
     global _extractor_singleton
-    if _extractor_singleton is None:
-        _extractor_singleton = LandmarkExtractor()
-    return _extractor_singleton
+    if _extractor_singleton is not None:
+        return _extractor_singleton
+    with _extractor_lock:
+        if _extractor_singleton is None:
+            _extractor_singleton = LandmarkExtractor()
+        return _extractor_singleton
 
 
 def _capture_sign(
