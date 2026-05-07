@@ -17,7 +17,7 @@ Two people who couldn't communicate, now can.
 
 A deaf person signs into the webcam. SignBridge — a multi-stage vision + reasoning + voice pipeline running on a single AMD Instinct MI300X — translates the signs into spoken English in under 2 seconds.
 
-Submission for the **AMD Developer Hackathon** (LabLab.ai, May 2026), **Track 3 — Vision & Multimodal AI**.
+Submission for the **AMD Developer Hackathon** (LabLab.ai, May 2026) — **Track 3: Vision & Multimodal AI**.
 
 ## How it works
 

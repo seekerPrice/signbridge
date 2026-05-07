@@ -1,8 +1,9 @@
 # SignBridge — technical walkthrough
 
-> Draft. Filled in across the build window. This file doubles as the
-> "Build in Public — feedback on building with ROCm / AMD Developer Cloud"
-> submission deliverable.
+> Internal technical record of the build. Not a submission deliverable
+> (Build-in-Public extra challenge was dropped on 2026-05-07).
+> Kept around because it documents the AMD-specific engineering thinking
+> and is useful if anyone later asks "why these design choices?".
 
 ## What we built
 

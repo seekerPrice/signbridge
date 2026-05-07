@@ -14,19 +14,19 @@ Loaded when the working directory is inside `/Users/lucaslt/Documents/side-gig/a
 
 ## Status
 
-Day 1 / ~4 — pivoted from Iris to SignBridge on 2026-05-07. **Submission deadline: 2026-05-11 03:00 MYT.** ~3.5 days remaining. AMD Developer Hackathon, Track 3 (Vision & Multimodal AI) + Extra Challenge (Build in Public). Currently scaffolding + Day 1 hello-world.
+Day 1 / ~4 — pivoted from Iris to SignBridge on 2026-05-07. **Submission deadline: 2026-05-11 03:00 MYT.** ~3.5 days remaining. AMD Developer Hackathon, **Track 3 — Vision & Multimodal AI** (only — Build-in-Public dropped 2026-05-07). Currently scaffolding + Day 1 hello-world.
 
 ## Goal
 
-Win the AMD Developer Hackathon (LabLab.ai, May 2026), Track 3 + Extra Challenge, with a real-time webcam-based ASL → English speech translator. A deaf person signs → AI speaks. The demo IS the project: judges literally see two people who couldn't communicate, now do.
+Win the AMD Developer Hackathon (LabLab.ai, May 2026), Track 3, with a real-time webcam-based ASL → English speech translator. A deaf person signs → AI speaks. The demo IS the project: judges literally see two people who couldn't communicate, now do.
 
 ### Success criteria
 
-- Submission accepted by 2026-05-11 03:00 MYT — live HF Space (Gradio) URL + open-source GitHub mirror (Apache 2.0) + HF Hub trained-classifier artifact + technical walkthrough markdown + 2–3 min demo video + 2 social posts during build.
-- End-to-end working flow: webcam frame stream → MediaPipe Holistic → trained sign classifier → Llama-3.1-8B sentence composer → Coqui XTTS-v2 → speech output. **≤ 2 s** from end-of-sign to start of speech.
+- Submission accepted by 2026-05-11 03:00 MYT — live HF Space (Gradio) URL + 2–3 min demo video + lablab.ai submission form complete.
+- End-to-end working flow: webcam frame → VLM recognizer → Llama-3.1-8B sentence composer → Coqui XTTS-v2 → speech output. **≤ 2 s** from capture to start of speech.
 - V1 use cases: (1) ASL fingerspelling alphabet A–Z + 0–9, (2) Top-50 WLASL signs (hello, thank you, name, please, …). Target ≥ 75% accuracy on a 30-sample gold set.
 - Reverse direction (speech → on-screen text for the deaf user) is a **stretch** for the buffer day only.
-- Track 3 + Build-in-Public: top-3 finish at minimum; gold target.
+- Track 3: top-3 finish at minimum; gold target.
 
 ---
 
@@ -142,7 +142,7 @@ git push huggingface main
 - **Working dir:** `/Users/lucaslt/Documents/side-gig/amd-hackathon/`
 - **Hackathon page:** https://lablab.ai/ai-hackathons/amd-developer
 - **AMD article:** https://www.amd.com/en/developer/resources/technical-articles/2026/build-across-the-ai-stack--join-the-amd-x-lablab-ai-hackathon-.html
-- **Track:** 3 (Vision & Multimodal AI) + Extra Challenge (Ship It + Build in Public)
+- **Track:** 3 (Vision & Multimodal AI). Extra Challenge (Build in Public) intentionally skipped 2026-05-07.
 - **WLASL dataset:** https://github.com/dxli94/WLASL
 - **MediaPipe Holistic:** https://developers.google.com/mediapipe/solutions/vision/holistic_landmarker
 - **HF Hub org / Space:** *fill in once created*
@@ -153,6 +153,8 @@ git push huggingface main
 ---
 
 ## Progress log (newest first)
+
+**2026-05-07 — Dropped Build-in-Public extra challenge.** Track 3 only. Frees ~2 hours that were earmarked for the 2 social posts + the external-facing walkthrough framing. Walkthrough doc kept as an internal technical record but no longer a submission deliverable.
 
 **2026-05-07 — Pivoted to SignBridge.** Re-scored against the four judging criteria: SignBridge wins on Originality (10) and Presentation (10) thanks to the live deaf-person-to-hearing-person demo. Business value also stronger (Sorenson VRS comparable, mandated interpreter budgets). Replaced Iris scaffold (`iris/` package, README, requirements deps) with `signbridge/` package. CLAUDE.md, plan file, README rewritten. Day 1 hello-world starts: MediaPipe Holistic on webcam, WLASL data download, Plan-B VLM test.
 
