@@ -29,27 +29,12 @@ import numpy as np
 # Closed vocabulary the VLM is asked to choose from. Imported from the
 # shared `signbridge.vocab` module so the recognizer and the trained
 # classifier (`signbridge.recognizer.classifier`) can never drift.
-from signbridge.vocab import VOCAB_PROMPT_LITERAL as _VLM_VOCAB
+from signbridge.recognizer.prompts import build_single_frame_prompt
 from signbridge.vocab import VOCAB_SET as _VLM_VOCAB_SET
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_VLM_MODEL = os.getenv("SIGNBRIDGE_VLM_MODEL", "Qwen/Qwen2-VL-7B-Instruct")
-
-_PROMPT = (
-    "You are an expert in American Sign Language (ASL). Look at this image of a "
-    "single signed gesture. Identify which ASL sign or fingerspelled letter is "
-    "being shown.\n\n"
-    "Reply with EXACTLY ONE token from this list, no other text, no quotes, no "
-    "explanation:\n"
-    f"{_VLM_VOCAB}\n\n"
-    "Rules:\n"
-    "- Single uppercase letter (A-Z) for fingerspelling letters.\n"
-    "- Single digit (0-9) for fingerspelled numbers.\n"
-    "- Lowercase word with underscores for full-word signs (e.g. thank_you).\n"
-    "- 'unknown' if no sign is visible or the gesture isn't in the list.\n"
-    "- Do NOT explain. Do NOT add punctuation. Single token only."
-)
 
 
 @lru_cache(maxsize=4)
@@ -151,7 +136,7 @@ def recognize_sign_from_frame(frame: np.ndarray) -> tuple[str, float]:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": _PROMPT},
+                        {"type": "text", "text": build_single_frame_prompt()},
                         {"type": "image_url", "image_url": {"url": data_url}},
                     ],
                 }
