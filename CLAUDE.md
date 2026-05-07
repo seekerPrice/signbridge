@@ -157,7 +157,7 @@ Win the AMD Developer Hackathon (LabLab.ai, May 2026), Track 3, with a real-time
 ## Tech stack (locked)
 
 - Languages: Python 3.12 (primary)
-- Submission deliverable: Hugging Face Space (Gradio app, public, Apache 2.0)
+- Submission deliverable: Hugging Face Space (Gradio app, public, MIT)
 - Inference backend: FastAPI on AMD Developer Cloud (single MI300X instance), exposed as OpenAI-compatible API
 - Transport: HTTPS for V1; WebSocket only if latency demands it post-Day-2
 - Pipeline (concurrent on one MI300X):
@@ -204,7 +204,7 @@ git push huggingface main
 ```
 /Users/lucaslt/Documents/side-gig/amd-hackathon/
 ├── README.md                       # HF Space card via frontmatter
-├── LICENSE                         # Apache 2.0
+├── LICENSE                         # MIT
 ├── CLAUDE.md
 ├── .claude/
 ├── requirements.txt
