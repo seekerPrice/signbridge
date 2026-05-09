@@ -176,11 +176,19 @@ def _speak(state: _SessionState) -> tuple[str, str | None, _SessionState]:
     return sentence, state.last_audio_path, state
 
 
-def _clear(state: _SessionState) -> tuple[str, str, str, None, _SessionState]:
+def _clear(state: _SessionState) -> tuple[None, str, str, str, None, _SessionState]:
+    """Reset everything visible — including the captured webcam frame."""
     state.sign_history.clear()
     state.last_sentence = ""
     state.last_audio_path = None
-    return "", _format_history(state.sign_history), "", None, state
+    return (
+        None,                                # webcam image  → cleared
+        "",                                  # latest status text
+        _format_history(state.sign_history), # history markdown
+        "",                                  # composed sentence textbox
+        None,                                # audio out
+        state,
+    )
 
 
 _WEBCAM_BUTTON_LABEL_CSS = """
@@ -245,10 +253,12 @@ def build_demo() -> gr.Blocks:
                     with gr.Column(scale=3):
                         gr.HTML(
                             '<div class="signbridge-webcam-help">'
-                            '<b>How it works:</b> click the webcam icon to '
-                            '<b>Start</b> the camera, sign a letter, then '
-                            'press <b>✋ Capture sign</b> below. Click the '
-                            'red square to <b>Stop</b> the camera.'
+                            '<b>How it works:</b> '
+                            '<b>1.</b> click <b>Click to Access Webcam</b> · '
+                            '<b>2.</b> sign a letter (A–Z) · '
+                            '<b>3.</b> click <b>📷 Take Photo</b> on the preview · '
+                            '<b>4.</b> press <b>✋ Capture sign</b> below · '
+                            '<b>5.</b> repeat for the next letter, then press <b>🔊 Speak</b>.'
                             "</div>"
                         )
                         webcam = gr.Image(
@@ -315,7 +325,7 @@ def build_demo() -> gr.Blocks:
                 clear_btn.click(
                     fn=_clear,
                     inputs=[state],
-                    outputs=[latest, history, sentence_box, audio_out, state],
+                    outputs=[webcam, latest, history, sentence_box, audio_out, state],
                 )
 
             with gr.Tab("Record sign — full ASL words"):
@@ -327,10 +337,10 @@ def build_demo() -> gr.Blocks:
                 )
                 gr.HTML(
                     '<div class="signbridge-webcam-help">'
-                    '<b>Click the red record button to <span style="color:#dc2626">'
-                    'Start</span></b>, hold while signing, then '
-                    '<b>click again to <span style="color:#4f46e5">Stop</span></b>. '
-                    'Press <b>🎬 Submit recording</b> below.'
+                    '<b>How it works:</b> '
+                    '<b>1.</b> click the webcam to access it · '
+                    '<b>2.</b> click <b>● Record</b>, sign for 1.5–2 seconds, click <b>■ Stop</b> · '
+                    '<b>3.</b> press <b>🎬 Submit recording</b> below.'
                     "</div>"
                 )
                 video_in = gr.Video(
