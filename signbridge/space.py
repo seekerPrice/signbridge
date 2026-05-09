@@ -139,13 +139,24 @@ def _shared_extractor() -> LandmarkExtractor:
 def _capture_sign(
     frame: np.ndarray | None,
     state: _SessionState,
-) -> tuple[str, str, _SessionState]:
+) -> tuple[object, str, str, _SessionState]:
+    """Wired to webcam.change(). Fires twice per cycle:
+       1. None → ndarray  (user took a photo) — run recognition
+       2. ndarray → None  (we just reset; or the user dismissed) — no-op
+
+    Returns 4 values matching outputs [webcam, latest, history, state].
+    The webcam slot uses gr.update() to keep the live preview intact on
+    no-ops, and `None` to dismiss the captured photo after recognition so
+    the next "📷 Take Photo" click is one tap away.
+    """
     if frame is None:
-        return "(no webcam frame yet — allow camera access)", _format_history(state.sign_history), state
+        # No-op: came from our own reset or a manual dismiss.
+        return gr.update(), gr.update(), gr.update(), state
 
     token, confidence = _recognize(frame)
     if not token or confidence < 0.5:
         return (
+            None,  # dismiss photo so user can immediately retry
             "_couldn't recognise that one — try centering the gesture and a plain background_",
             _format_history(state.sign_history),
             state,
@@ -153,6 +164,7 @@ def _capture_sign(
 
     state.sign_history.append(token)
     return (
+        None,  # dismiss photo so live preview comes back for the next letter
         f"detected: **{token}** ({confidence:.0%})",
         _format_history(state.sign_history),
         state,
@@ -299,11 +311,12 @@ def build_demo() -> gr.Blocks:
                         )
 
                 # Auto-fire recognition when the user clicks "📷 Take Photo".
-                # Saves a button — taking the photo IS the capture.
+                # The handler also resets the webcam to None on success so
+                # the next photo is just one tap away (no manual dismiss).
                 webcam.change(
                     fn=_capture_sign,
                     inputs=[webcam, state],
-                    outputs=[latest, history, state],
+                    outputs=[webcam, latest, history, state],
                 )
                 speak_btn.click(
                     fn=_speak,
