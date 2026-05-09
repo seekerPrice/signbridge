@@ -80,6 +80,10 @@ class _SessionState:
     sign_history: list[str] = field(default_factory=list)
     last_sentence: str = ""
     last_audio_path: str | None = None
+    # Latest webcam frame stashed by the .stream() handler so the Take-image
+    # button can pull from state instead of trying to read the gr.Image
+    # value (which is None unless explicitly captured).
+    latest_frame: object = None  # np.ndarray | None — typed loosely to keep dataclass simple
 
 
 def _new_session() -> _SessionState:
@@ -136,27 +140,37 @@ def _shared_extractor() -> LandmarkExtractor:
         return _extractor_singleton
 
 
-def _capture_sign(
-    frame: np.ndarray | None,
-    state: _SessionState,
-) -> tuple[object, str, str, _SessionState]:
-    """Wired to webcam.change(). Fires twice per cycle:
-       1. None → ndarray  (user took a photo) — run recognition
-       2. ndarray → None  (we just reset; or the user dismissed) — no-op
+def _stash_frame(
+    frame: np.ndarray | None, state: _SessionState
+) -> _SessionState:
+    """Webcam .stream() handler — keeps the latest frame on the session.
 
-    Returns 4 values matching outputs [webcam, latest, history, state].
-    The webcam slot uses gr.update() to keep the live preview intact on
-    no-ops, and `None` to dismiss the captured photo after recognition so
-    the next "📷 Take Photo" click is one tap away.
+    The Take-image button reads from `state.latest_frame` so we don't need
+    to wrestle with the gr.Image value (which is None except right after a
+    photo-capture click). With `streaming=True`, this handler fires
+    continuously while the user has the camera on.
     """
-    if frame is None:
-        # No-op: came from our own reset or a manual dismiss.
-        return gr.update(), gr.update(), gr.update(), state
+    if frame is not None:
+        state.latest_frame = frame
+    return state
 
-    token, confidence = _recognize(frame)
+
+def _capture_sign(
+    state: _SessionState,
+) -> tuple[str, str, _SessionState]:
+    """Take-image button handler. Reads the most recent streamed frame
+    from the session state, runs recognition, appends to history."""
+    frame = state.latest_frame
+    if frame is None:
+        return (
+            "_no frame yet — click the webcam to grant access first_",
+            _format_history(state.sign_history),
+            state,
+        )
+
+    token, confidence = _recognize(frame)  # type: ignore[arg-type]
     if not token or confidence < 0.5:
         return (
-            None,  # dismiss photo so user can immediately retry
             "_couldn't recognise that one — try centering the gesture and a plain background_",
             _format_history(state.sign_history),
             state,
@@ -164,7 +178,6 @@ def _capture_sign(
 
     state.sign_history.append(token)
     return (
-        None,  # dismiss photo so live preview comes back for the next letter
         f"detected: **{token}** ({confidence:.0%})",
         _format_history(state.sign_history),
         state,
@@ -188,13 +201,13 @@ def _speak(state: _SessionState) -> tuple[str, str | None, _SessionState]:
     return sentence, state.last_audio_path, state
 
 
-def _clear(state: _SessionState) -> tuple[None, str, str, str, None, _SessionState]:
-    """Reset everything visible — including the captured webcam frame."""
+def _clear(state: _SessionState) -> tuple[str, str, str, None, _SessionState]:
+    """Reset history, sentence, and audio. Leave the streaming webcam
+    intact so the next capture is one click away."""
     state.sign_history.clear()
     state.last_sentence = ""
     state.last_audio_path = None
     return (
-        None,                                # webcam image  → cleared
         "",                                  # latest status text
         _format_history(state.sign_history), # history markdown
         "",                                  # composed sentence textbox
@@ -266,30 +279,33 @@ def build_demo() -> gr.Blocks:
                         gr.HTML(
                             '<div class="signbridge-webcam-help">'
                             '<b>How it works:</b> '
-                            '<b>1.</b> click <b>Click to Access Webcam</b> · '
+                            '<b>1.</b> click the webcam once to grant access · '
                             '<b>2.</b> sign a letter (A–Z) · '
-                            '<b>3.</b> click <b>📷 Take Photo</b> — recognition is automatic · '
+                            '<b>3.</b> click <b>📸 Take image</b> — recognition is automatic · '
                             '<b>4.</b> repeat for the next letter, then press <b>🔊 Speak</b>.'
                             "</div>"
                         )
                         webcam = gr.Image(
                             sources=["webcam"],
-                            # NOTE: streaming=True is intentionally OFF here.
-                            # With it on, gradio's button-click handlers don't
-                            # receive the current frame — the input value stays
-                            # at the initial None until a stream event fires.
-                            # Without it, the user sees a live webcam preview
-                            # AND the "Capture sign" click reliably sends the
-                            # current frame as the input.
-                            streaming=False,
+                            # streaming=True keeps the live preview running
+                            # after the one-time permission grant, so the
+                            # user never sees the access-prompt screen
+                            # again. Frames are stashed in session state via
+                            # the .stream() handler, and the Take-image
+                            # button reads from there.
+                            streaming=True,
                             label="Sign here",
                             height=420,
                             type="numpy",
                             elem_classes=["signbridge-webcam"],
                         )
-                        clear_btn = gr.Button(
-                            "🧹 Clear", variant="secondary", size="lg"
-                        )
+                        with gr.Row():
+                            capture_btn = gr.Button(
+                                "📸 Take image", variant="primary", size="lg"
+                            )
+                            clear_btn = gr.Button(
+                                "🧹 Clear", variant="secondary", size="lg"
+                            )
                         latest = gr.Markdown(value="")
 
                     with gr.Column(scale=2):
@@ -310,13 +326,20 @@ def build_demo() -> gr.Blocks:
                             "Spell out a word letter-by-letter, then press Speak."
                         )
 
-                # Auto-fire recognition when the user clicks "📷 Take Photo".
-                # The handler also resets the webcam to None on success so
-                # the next photo is just one tap away (no manual dismiss).
-                webcam.change(
-                    fn=_capture_sign,
+                # Continuously stash the latest webcam frame on the session
+                # state. The Take-image button reads from there. `time_limit`
+                # caps stream duration; gradio re-arms it after each
+                # interaction so the camera stays live for the demo.
+                webcam.stream(
+                    fn=_stash_frame,
                     inputs=[webcam, state],
-                    outputs=[webcam, latest, history, state],
+                    outputs=[state],
+                    show_progress="hidden",
+                )
+                capture_btn.click(
+                    fn=_capture_sign,
+                    inputs=[state],
+                    outputs=[latest, history, state],
                 )
                 speak_btn.click(
                     fn=_speak,
@@ -326,7 +349,7 @@ def build_demo() -> gr.Blocks:
                 clear_btn.click(
                     fn=_clear,
                     inputs=[state],
-                    outputs=[webcam, latest, history, sentence_box, audio_out, state],
+                    outputs=[latest, history, sentence_box, audio_out, state],
                 )
 
             with gr.Tab("Record sign — full ASL words"):
