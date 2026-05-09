@@ -40,8 +40,20 @@ class LandmarkExtractor:
             import mediapipe as mp  # type: ignore[import-not-found]
         except ImportError:
             logger.warning(
-                "mediapipe not installed; landmarks will be all zeros. "
-                "Install via `pip install mediapipe>=0.10.18`."
+                "mediapipe not installed; landmarks will be all zeros."
+            )
+            return
+        # MediaPipe 0.10.15+ deprecated and eventually removed the legacy
+        # `mp.solutions` namespace in favour of `mp.tasks`. The Holistic
+        # solution moved to `mediapipe-extended` and isn't critical for the
+        # production fingerspelling path (that uses Tasks API in
+        # signbridge.recognizer.landmark_classifier). When `solutions` is
+        # missing we silently skip the pose-debug overlay rather than
+        # crashing the whole Space.
+        if not hasattr(mp, "solutions"):
+            logger.info(
+                "mediapipe.solutions not available (Holistic deprecated); "
+                "pose-tracking debug overlay disabled."
             )
             return
         self._mp_drawing = mp.solutions.drawing_utils
