@@ -87,13 +87,15 @@ Verbatim from lablab page → "Technology Partners & Workshops" → Hugging Face
   - 1st: 1 Reachy Mini Wireless + 6 months Hugging Face PRO + $500 Hugging Face Credits.
   - 2nd: 3 months Hugging Face PRO + $300 Hugging Face Credits.
   - 3rd: 2 months Hugging Face PRO + $200 Hugging Face Credits.
+- 🐉 **Qwen Special Reward** (added by lablab page revision noticed 2026-05-09): "Best use of Qwen in each track — 10M Qwen tokens per team member." Awarded separately to the best Qwen-powered project per track.
 
 ### Prize targets for SignBridge
 
 - 🥇 **Track 3** (primary).
+- 🐉 **Qwen Special Reward — Track 3** (added 2026-05-09). SignBridge's recognizer is `Qwen/Qwen3-VL-32B-Instruct`; we are well-positioned. Action: lead the title/short-description/tags with Qwen3-VL, dedicate a pitch-deck slide to Qwen integration.
 - 🤗 **HF Special Prize** (most likes — requires Space in event org + sharing the link).
 - 🏆 Grand Prize (aspirational).
-- ❌ Build-in-Public extra: **dropped** by user direction 2026-05-07 (no tweet obligations; walkthrough kept as internal doc only).
+- ❌ Build-in-Public extra: **dropped** by user direction 2026-05-07 (no tweet obligations; walkthrough kept as internal doc only). Re-confirmed 2026-05-09 — with ~36h remaining, finishing the live demo outranks 2 social posts.
 
 ### License rule
 
@@ -102,7 +104,7 @@ Per the Voluntary Participation & Prize Terms footer: *"Submissions must be orig
 ### Tech stack constraints (per Track 3)
 
 - **Compute:** AMD Instinct MI300X via AMD Developer Cloud (datacenter GPU, 192 GB HBM3, 5.3 TB/s memory bandwidth). Not Ryzen, not Radeon Pro — those are different AMD product lines.
-- **Models:** Multimodal models optimized for ROCm. Examples called out by the rules: Llama 3.2 Vision, Qwen-VL family. SignBridge uses `Qwen/Qwen3-VL-8B-Instruct` (Qwen-VL family ✓) for sign recognition + `meta-llama/Llama-3.1-8B-Instruct` for sentence composition + `coqui/XTTS-v2` for speech.
+- **Models:** Multimodal models optimized for ROCm. Examples called out by the rules: Llama 3.2 Vision, Qwen-VL family. SignBridge uses `Qwen/Qwen3-VL-32B-Instruct` (Qwen-VL family ✓) for sign recognition + `Qwen/Qwen3-8B` for sentence composition + `coqui/XTTS-v2` for speech.
 - **Frameworks:** ROCm + PyTorch + Hugging Face Optimum-AMD + vLLM (per the rules).
 
 ### Workshop references (provided by AMD)
@@ -165,7 +167,7 @@ Win the AMD Developer Hackathon (LabLab.ai, May 2026), Track 3, with a real-time
 - Pipeline (concurrent on one MI300X):
   - **Pose extraction:** MediaPipe Holistic (Google) — frame → 543-dim landmark vector
   - **Sign classifier:** trained-from-scratch small transformer over landmark sequences (WLASL Top-100 + ASL fingerspelling alphabet) → sign tokens
-  - **Sentence composer:** `meta-llama/Llama-3.1-8B-Instruct` → grammatical English sentence from sign-token stream
+  - **Sentence composer:** `Qwen/Qwen3-8B` → grammatical English sentence from sign-token stream
   - **TTS:** `coqui/XTTS-v2` → audio
   - **(Stretch) STT:** `openai/whisper-large-v3` → reverse direction (speech → on-screen text)
 - Datasets: [WLASL](https://github.com/dxli94/WLASL) Top-100 subset + ASL fingerspelling alphabet (open)

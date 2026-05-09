@@ -23,17 +23,11 @@ Submission for the **AMD Developer Hackathon** (LabLab.ai, May 2026) — **Track
 ## How it works
 
 ```
-webcam frames  →  MediaPipe Holistic   →  trained sign classifier
-   (1–5 fps)        (543-dim pose)        (WLASL Top-100 + alphabet)
-                                                  │
-                                                  ▼
-                                      Llama-3.1-8B sentence composer
-                                                  │
-                                                  ▼
-                                            Coqui XTTS-v2  →  speech
+webcam frames  →  Qwen3-VL-32B  →  Qwen3-8B  →  Coqui XTTS-v2  →  speech
+                  (sign vision)   (composer)   (TTS)
 ```
 
-All four stages run **concurrently on a single AMD Instinct MI300X** via AMD Developer Cloud. Total weights ~22 GB on a 192 GB GPU — fits with margin for KV cache + serving overhead.
+All three stages run **concurrently on a single AMD Instinct MI300X** via AMD Developer Cloud. Total weights ~34 GB (Qwen3-VL-32B + Qwen3-8B + XTTS-v2) on a 192 GB GPU — fits with margin for KV cache + serving overhead. Both LLMs are Qwen-family, served via vLLM 0.17.1 on ROCm 7.2.
 
 ## V1 use cases
 
@@ -44,7 +38,7 @@ V1 is **one-way**: deaf signs → hearing hears. Reverse direction (speech → o
 
 ## Why AMD
 
-The MI300X's 192 GB HBM3 fits the entire pipeline (Qwen3-VL-8B + Llama-3.1-8B + XTTS-v2) on one GPU with margin. NVIDIA H100 (80 GB) requires sharding, and the V2 plan to upgrade to a 70B reasoner is impossible on H100 without a 3-GPU cluster. Single-GPU concurrency + 5.3 TB/s memory bandwidth is the actual AMD pitch — practical accessibility tools running globally need the cost-and-availability profile that AMD enables.
+The MI300X's 192 GB HBM3 fits the entire pipeline (Qwen3-VL-32B + Llama-3.1-8B + XTTS-v2) on one GPU with margin. NVIDIA H100 (80 GB) requires sharding, and the V2 plan to upgrade to a 70B reasoner is impossible on H100 without a 3-GPU cluster. Single-GPU concurrency + 5.3 TB/s memory bandwidth is the actual AMD pitch — practical accessibility tools running globally need the cost-and-availability profile that AMD enables.
 
 ## Why this matters (business case)
 
@@ -82,7 +76,8 @@ python -m signbridge.scripts.train_classifier --dataset data/wlasl --epochs 30
 
 ## Models pulled from Hugging Face Hub
 
-- `meta-llama/Llama-3.1-8B-Instruct` — sentence composer
+- `Qwen/Qwen3-VL-32B-Instruct` — sign vision (recognizer)
+- `Qwen/Qwen3-8B` — sentence composer
 - `coqui/XTTS-v2` — text-to-speech
 - (V2 stretch) `openai/whisper-large-v3` — for the reverse direction
 

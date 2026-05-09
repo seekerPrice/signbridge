@@ -117,6 +117,24 @@ The 2–3 minute demo video, looping, autoplay-on-slide-show.
 
 ---
 
+## Slide 6.5 — Qwen3-VL is the brain
+
+**Headline:**
+Qwen3-VL-8B-Instruct: the visual intelligence behind every sign.
+
+**Body bullets:**
+- The recognizer is **Qwen3-VL-8B-Instruct** — Alibaba's open Qwen-VL family, served from Hugging Face Hub.
+- We feed it **multi-image bursts** (4 frames over 1.5 s) for motion-dependent signs like HELLO and THANK_YOU — single-frame models fundamentally cannot translate ASL.
+- **Closed-vocabulary forcing** + **sequential frame markers** (NVIDIA video-VLM pattern) keep Qwen on-rails for the 87-token sign vocab. No fine-tuning needed — Qwen3-VL is strong enough zero-shot.
+- Llama-3.1-8B then composes Qwen's tokens into grammatical English; XTTS-v2 speaks it.
+
+**Closer:**
+Qwen3-VL is the only thing in the pipeline making the visual judgement. The rest is plumbing.
+
+*Visual: a single screenshot of `signbridge/recognizer/vlm.py` showing the multi-frame Qwen call, alongside an arrow into a "detected: HELLO (85%)" overlay.*
+
+---
+
 ## Slide 7 — Why this is the right submission for Track 3
 
 **Headline:**

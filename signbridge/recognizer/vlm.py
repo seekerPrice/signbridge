@@ -37,7 +37,7 @@ from signbridge.vocab import VOCAB_SET as _VLM_VOCAB_SET
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_VLM_MODEL = os.getenv("SIGNBRIDGE_VLM_MODEL", "Qwen/Qwen2-VL-7B-Instruct")
+DEFAULT_VLM_MODEL = os.getenv("SIGNBRIDGE_VLM_MODEL", "Qwen/Qwen3-VL-32B-Instruct")
 
 
 @lru_cache(maxsize=4)

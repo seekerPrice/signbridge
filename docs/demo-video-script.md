@@ -80,7 +80,7 @@ Webcam frames → Qwen3-VL-8B (vision) → Llama-3.1-8B (composer) → XTTS-v2 (
 ```
 
 **Voice-over:**
-> "Under the hood: a multi-modal pipeline running on a single AMD Instinct MI300X. Vision, reasoning, and voice — all concurrent on one GPU."
+> "Under the hood: Qwen3-VL-8B reads each frame, Llama-3.1 composes the sentence, XTTS speaks it — all running concurrently on a single AMD Instinct MI300X. Vision, reasoning, and voice on one GPU."
 
 **Beat 3B — The MI300X comparison (1:55 → 2:15):**
 
@@ -155,6 +155,7 @@ Webcam frames → Qwen3-VL-8B (vision) → Llama-3.1-8B (composer) → XTTS-v2 (
 - [ ] Length 2:00–3:00
 - [ ] Captions visible throughout
 - [ ] AMD Dev Cloud / MI300X mentioned by name ≥3 times
+- [ ] Qwen3-VL mentioned by name ≥2 times (Qwen Special Reward eligibility)
 - [ ] HF Space URL shown on screen at least once
 - [ ] GitHub URL shown on screen at least once
 - [ ] No copyrighted music / footage

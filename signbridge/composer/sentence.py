@@ -1,4 +1,4 @@
-"""Llama-3.1-8B sentence composer.
+"""Qwen3-8B sentence composer (Llama-3.1-8B-compatible by env var).
 
 Takes a stream of sign tokens (English glosses + fingerspelled letters)
 and composes a grammatical English sentence. Backed by an OpenAI-compatible
@@ -50,12 +50,21 @@ def _resolve_client() -> tuple[object | None, str]:
     """Return (cached client, model_id) based on SIGNBRIDGE_PROVIDER env var."""
     provider = os.getenv("SIGNBRIDGE_PROVIDER", "amd").lower()
     composer_model = os.getenv(
-        "SIGNBRIDGE_COMPOSER_MODEL", "meta-llama/Llama-3.1-8B-Instruct"
+        "SIGNBRIDGE_COMPOSER_MODEL", "Qwen/Qwen3-8B"
     )
 
     if provider == "amd":
-        base_url = os.getenv("AMD_DEV_CLOUD_BASE_URL", "").rstrip("/")
-        api_key = os.getenv("AMD_DEV_CLOUD_API_KEY", "")
+        # Prefer a composer-specific base URL/key (lets us run Qwen-VL on :8000
+        # and the composer on :8001 of the same MI300X). Falls back to the
+        # shared AMD_DEV_CLOUD_BASE_URL when not split.
+        base_url = (
+            os.getenv("SIGNBRIDGE_COMPOSER_BASE_URL")
+            or os.getenv("AMD_DEV_CLOUD_BASE_URL", "")
+        ).rstrip("/")
+        api_key = (
+            os.getenv("SIGNBRIDGE_COMPOSER_API_KEY")
+            or os.getenv("AMD_DEV_CLOUD_API_KEY", "")
+        )
         if not base_url or not api_key:
             logger.info("AMD Dev Cloud not configured; falling back to naive joiner.")
             return None, composer_model
@@ -117,6 +126,9 @@ def compose_sentence(signs: Sequence[str]) -> str:
     if client is None:
         return _naive_join(signs)
 
+    # Qwen3 reasoning models default to emitting <think>...</think>; disable
+    # via the chat-template kwarg so vLLM serves a direct sentence. Harmless
+    # for non-Qwen3 models (extra_body keys they don't know are ignored).
     try:
         resp = client.chat.completions.create(  # type: ignore[attr-defined]
             model=model,
@@ -126,6 +138,7 @@ def compose_sentence(signs: Sequence[str]) -> str:
             ],
             temperature=0.2,
             max_tokens=120,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
         text = (resp.choices[0].message.content or "").strip()
     except Exception as exc:  # noqa: BLE001 — broad catch is intentional at the boundary

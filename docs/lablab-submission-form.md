@@ -7,17 +7,17 @@
 ## Project Title (≤ ~70 chars)
 
 ```
-SignBridge — Real-time ASL → English speech on AMD Instinct MI300X
+SignBridge — Real-time ASL → speech, Qwen3-VL on AMD MI300X
 ```
 
-(63 characters; safe under platform limit.)
+(60 characters; leads with Qwen for Qwen Special Reward eligibility.)
 
 ---
 
 ## Short Description (≤ 150 chars typical)
 
 ```
-Two people who couldn't communicate, now can. Real-time ASL → English speech via Qwen3-VL + Llama-3.1 + XTTS, on a single AMD MI300X.
+Two people who couldn't communicate, now can. Real-time ASL → English speech, powered by Qwen3-VL on AMD Instinct MI300X.
 ```
 
 (132 characters.)
@@ -27,11 +27,11 @@ Two people who couldn't communicate, now can. Real-time ASL → English speech v
 ## Long Description (no hard limit, ~300 words is the sweet spot)
 
 ```
-SignBridge is a real-time American Sign Language to English speech translator built for the AMD Developer Hackathon, Track 3 (Vision & Multimodal AI).
+SignBridge is a real-time American Sign Language to English speech translator built for the AMD Developer Hackathon, Track 3 (Vision & Multimodal AI). It is powered by Qwen3-VL-8B for visual understanding of signs.
 
 The user signs at the webcam — either fingerspelled letters (Snapshot tab) or full motion words (Record sign tab) — and SignBridge replies in spoken English. Two people who couldn't communicate, now can.
 
-Architecture: a multi-stage pipeline (Qwen3-VL-8B for sign recognition, Llama-3.1-8B for sentence composition, Coqui XTTS-v2 for speech synthesis), running concurrently on a single AMD Instinct MI300X via vLLM. The 192 GB HBM3 of one MI300X holds the entire pipeline with margin — the same workload on NVIDIA H100 needs three GPUs.
+Architecture: a multi-stage pipeline (Qwen3-VL-8B for sign recognition — the core intelligence; Llama-3.1-8B for sentence composition; Coqui XTTS-v2 for speech synthesis), running concurrently on a single AMD Instinct MI300X via vLLM. The 192 GB HBM3 of one MI300X holds the entire pipeline with margin — the same workload on NVIDIA H100 needs three GPUs.
 
 For motion-dependent signs (HELLO, THANK_YOU, PLEASE, EAT) the Record-sign tab captures 1.5 s of webcam, samples 4 evenly-spaced frames, and sends them as a multi-image VLM call with NVIDIA-style sequential frame markers in the prompt — most ASL signs are motion, not held poses, so single-frame approaches fundamentally cannot translate them.
 
@@ -49,13 +49,13 @@ Built solo by Lucas Loo Tan Yu Heng, May 5–11, 2026.
 Pick from lablab's tag dropdown — these are the tags that match SignBridge:
 
 **Primary (must-haves):**
+- `Qwen` / `Qwen3-VL` (Qwen3-VL-8B vision recognizer — central; eligible for Qwen Special Reward 10M tokens)
 - `AMD Developer Cloud`
 - `AMD ROCm`
 - `HuggingFace Spaces`
 
 **Secondary (relevant):**
 - `LLaMA` (Llama-3.1-8B composer)
-- `Qwen` (Qwen3-VL-8B vision)
 - `Gradio`
 - `FastAPI`
 - `Vision`
