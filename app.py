@@ -16,13 +16,18 @@ from signbridge.space import build_demo
 
 def main() -> None:
     load_dotenv()
+    # Make gradio's `_check_localhost` pre-flight skip itself — on HF Spaces
+    # Docker the loopback connect-back occasionally races the bind and trips
+    # the "When localhost is not accessible" guard. Setting SYSTEM=spaces
+    # mirrors what the gradio-SDK runtime sets and is the documented escape
+    # hatch.
+    os.environ.setdefault("SYSTEM", "spaces")
     demo = build_demo()
-    # Docker-SDK Space: we own the runtime, bind explicitly. Env vars from
-    # the Dockerfile set GRADIO_SERVER_NAME=0.0.0.0 / PORT=7860 already; the
-    # explicit args here are belt-and-suspenders.
     demo.queue().launch(
         server_name=os.getenv("GRADIO_SERVER_NAME", "0.0.0.0"),
         server_port=int(os.getenv("GRADIO_SERVER_PORT", "7860")),
+        share=False,
+        show_error=True,
     )
 
 

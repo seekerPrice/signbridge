@@ -259,6 +259,14 @@ git push huggingface main
 
 ## Progress log (newest first)
 
+**2026-05-10 — Switched HF Space to Docker SDK.** Gradio 4.44.1 + HF default Python 3.13 hit `ModuleNotFoundError: pyaudioop` (removed from stdlib in 3.13, hardcoded by pydub). Pinning python_version to 3.10/3.11 then exposed a separate gradio runtime issue ("localhost not accessible"). Docker SDK (python:3.11-slim) gives full control: working pydub/gradio audio, mediapipe wheels install, explicit GRADIO_SERVER_NAME=0.0.0.0:7860. Pushed at commit 961668b.
+
+**2026-05-09 — LoRA fine-tuned Qwen3-VL-8B on AMD MI300X (Track 2 win).** 54-min wall-clock training on a single MI300X via ROCm — peft 0.18.1, transformers 4.57.6, FP16, gradient checkpointing, LoRA rank 16 on q/k/v/o projections. 10,873-image Marxulia ASL Alphabet dataset (8,639 hands detected, 1087 holdout). Final eval loss 0.48; gold-set transformers eval **92.3%** (48/52) — beats Qwen3-VL-32B zero-shot (19.2%) and MediaPipe+MLP (90.4%). Adapter merged into base, model published at `huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl` (17.5GB). vLLM serving has Qwen3-VL image-preprocessing quirk (63.5%) — keeping MediaPipe+MLP as Snapshot-tab primary for now.
+
+**2026-05-09 — MediaPipe + small MLP classifier for fingerspelling — 90.4% gold-set accuracy.** Trained on 8,639 hand-landmark vectors extracted from the Marxulia ASL Alphabet dataset (10,873 source images, 21% skipped where MediaPipe couldn't detect a hand). 3-layer MLP (63→256→256→128→26) with GELU + dropout, AdamW + cosine schedule, 40 epochs. **88.0% test accuracy** on a 1,727-image holdout, **90.4% on the 52-image Wikipedia-style gold set** (vs 19.2% with Qwen3-VL alone — 4.7× improvement). Weights public at `huggingface.co/LucasLooTan/signbridge-asl-classifier` (478KB MLP + 7.5MB MediaPipe model). Snapshot tab now runs MediaPipe+MLP first, falls through to Qwen3-VL when no hand detected or conf<0.5.
+
+**2026-05-09 — vLLM live on AMD MI300X with Qwen3-VL-32B + Qwen3-8B.** Provisioned the MI300X x1 droplet ($1.99/hr, 192GB HBM3, ATL1). Two vLLM 0.17.1 containers via Docker: Qwen3-VL-32B-Instruct on :8000 (gpu-mem 0.55, vision recognizer for motion signs), Qwen3-8B on :8001 (gpu-mem 0.30, sentence composer with `enable_thinking: false`). Both expose OpenAI-compatible /v1 endpoints, secured with `signbridge-prod-key`. Composer hit on every `/speak` call → AMD is in the critical path.
+
 **2026-05-08 — Fix A: HF Space moved to event org.** Now at `huggingface.co/spaces/lablab-ai-amd-developer-hackathon/signbridge`. Eligible for HF Special Prize ranking. Personal-namespace `LucasLooTan/signbridge` left as-is (will mark private after the hackathon).
 
 **2026-05-07 — GitHub repo + HF Space live.** GitHub: `seekerPrice/signbridge`. HF Space: `LucasLooTan/signbridge` (Gradio SDK 4.44.1, Apache 2.0). All 16 source files mirrored to both. Awaiting AMD Dev Cloud credit email to wire up real VLM endpoint.

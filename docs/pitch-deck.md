@@ -55,35 +55,39 @@ Two people who couldn't communicate, now can.
 ## Slide 4 — Architecture (the AMD pitch)
 
 **Headline:**
-The whole pipeline fits on a single MI300X. NVIDIA H100 doesn't.
+We fine-tuned Qwen3-VL-8B on a single MI300X — 54 minutes, 92% accuracy.
 
 **Diagram (build in Slides; described as bullets):**
 ```
-[ Webcam frame burst (4 frames, 1.5 s) ]
-              │
-              ▼
-[ Qwen3-VL-8B  ── frame summariser, multi-image VLM call ]
-              │
-              ▼
-[ Llama-3.1-8B ── sentence composer (sign tokens → English) ]
-              │
-              ▼
-[ Coqui XTTS-v2 ── multilingual streaming TTS ]
-              │
-              ▼
-[ Audio out ── speaker / Gradio audio component ]
+[ Webcam frame ]
+       │
+       ├─►  MediaPipe Hand → trained MLP classifier
+       │      (90% on ASL fingerspelling, 50ms CPU)
+       │      └─ falls through to ↓ when no hand detected
+       │
+       └─►  Fine-tuned Qwen3-VL-8B (LoRA on MI300X)
+              ── handles motion signs and ambiguous static frames
+                                       │
+                                       ▼
+              [ Qwen3-8B composer ── sign tokens → English ]
+                                       │
+                                       ▼
+              [ Coqui XTTS-v2 ── speech synthesis ]
+                                       │
+                                       ▼
+                              [ Audio out ]
 ```
 
 **Comparison table (small print under diagram):**
 
 | Component | Weights (FP16) | MI300X 1× (192 GB) | H100 80 GB |
 |---|---|---|---|
-| Qwen3-VL-8B | ~16 GB | ✅ fits | ✅ |
-| Llama-3.1-8B | ~16 GB | ✅ fits | ✅ |
+| Fine-tuned Qwen3-VL-8B | ~16 GB | ✅ fits | ✅ |
+| Qwen3-8B composer | ~16 GB | ✅ fits | ✅ |
 | XTTS-v2 + Whisper (V2) | ~5 GB | ✅ fits | ⚠ tight |
 | (V2) **Llama-3.1-70B FP8 reasoner** | ~70 GB | **✅ still fits** | **❌ doesn't fit at all** |
 
-**Closer:** The single-GPU concurrency story is the AMD pitch.
+**The MI300X did three jobs in this project:** (1) ran the LoRA fine-tune in 54 min, (2) hosts the merged 8B model for inference, (3) hosts the 8B composer in parallel — all on one GPU. That's the AMD pitch.
 
 *Visual: the diagram + table as a single composite slide. Use a brand colour for the AMD column to highlight.*
 

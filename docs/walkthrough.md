@@ -41,31 +41,50 @@ webcam frames → MediaPipe Holistic → trained classifier
 
 | Component | Source | Notes |
 |---|---|---|
-| Pose extractor | MediaPipe Holistic (Google) | CPU-fast preprocessing — not GPU-bound |
-| Sign classifier | trained from scratch on WLASL Top-100 + ASL fingerspelling alphabet | 3-layer transformer encoder over 543-dim landmark sequences; published to HF Hub at `lucas-loo/signbridge-classifier` |
-| Sentence composer | `meta-llama/Llama-3.1-8B-Instruct` | Pulled from HF Hub; served on MI300X via vLLM |
-| Text-to-speech | `coqui/XTTS-v2` | Multilingual; we use English V1 |
+| Hand-pose extractor | MediaPipe HandLandmarker (Google) | CPU-only, ~50ms/frame — runs on the HF Space CPU |
+| Static-letter classifier (Snapshot tab) | **trained-from-scratch MLP** on hand-landmark vectors → 26 ASL letters | 3-layer MLP (63→256→256→128→26), 5K trainable params, GELU+dropout. **88.0% test accuracy** on a 1,727-image holdout, **90.4% on the gold set**. Weights at `huggingface.co/LucasLooTan/signbridge-asl-classifier` |
+| Motion-sign + fallback recognizer | **fine-tuned `Qwen/Qwen3-VL-8B-Instruct`** | LoRA fine-tune on AMD MI300X (rank 16, target q/k/v/o, 2 epochs, 54 min wall-clock on a single MI300X). Eval loss 0.48, transformers gold-set accuracy 92.3%. Merged adapter pushed to `huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl` (17.5 GB) |
+| Sentence composer | `Qwen/Qwen3-8B` | Pulled from HF Hub; served on MI300X via vLLM. Used for every Speak click — AMD is in the critical path |
+| Text-to-speech | `coqui/XTTS-v2` | Multilingual; we use English V1. Falls back to a silent stub WAV when Coqui isn't installed |
 
 ## Datasets
 
-- [WLASL](https://github.com/dxli94/WLASL) Top-100 subset
-- ASL fingerspelling alphabet (open dataset)
+- **Marxulia/asl_sign_languages_alphabets_v03** (HF Hub) — 10,873 photographic ASL letter samples; we extracted MediaPipe landmarks (8,639 hands detected) + used the same images for the LoRA fine-tune (9,786 train / 1,087 eval split)
+- [WLASL](https://github.com/dxli94/WLASL) Top-100 subset — referenced for V2 motion-sign training (not used in V1)
 
 ## ROCm / AMD Developer Cloud experience
 
-> *Filled in across Day 1–3.*
-
 ### Day 1 — environment + sanity
-TODO
+- Provisioned an MI300X-1× droplet (192 GB HBM3, 240 GB RAM, 5 TB scratch) at $1.99/hr in ATL1
+- Selected the prebuilt **vLLM 0.17.1 / ROCm 7.2** Quick-Start image — saved ~30 min vs hand-installing
+- ROCm reported the GPU correctly via `rocm-smi`; vLLM spun up Qwen3-VL-32B + Qwen3-8B in parallel within 12 minutes
+- One real friction: vLLM's default `0.0.0.0` binding tripped a Gloo/NCCL error on the host's NIC; fixed by setting `VLLM_HOST_IP=127.0.0.1` and `GLOO_SOCKET_IFNAME=lo` env vars
 
-### Day 2 — training the classifier
-TODO
+### Day 2 — fine-tuning Qwen3-VL-8B with LoRA on MI300X
+- Used the AMD-provided `rocm:latest` Docker image — torch 2.9.1+ROCm, transformers 4.57.6, peft 0.18.1, accelerate 1.13.0 all preinstalled
+- LoRA rank 16 on q/k/v/o projections, FP16, gradient checkpointing with `use_reentrant=False`
+- Critical fix for PEFT + grad-checkpoint: call `model.enable_input_require_grads()` BEFORE wrapping in PEFT (without it, training stalls at step 0 with "None of the inputs have requires_grad=True")
+- 1,224 steps × 4×4 effective batch = 9,786 samples × 2 epochs in 54 minutes; eval loss 0.48
+- Spent ~$2 of the $100 credit on this single fine-tune
 
-### Day 3 — serving + latency tuning
-TODO
+### Day 3 — serving + accuracy comparison
+- **Three approaches benchmarked on the same 52-image gold set:**
+  - Qwen3-VL-32B zero-shot: **19.2%** — VLMs without ASL-specific tuning struggle with subtle hand shapes
+  - MediaPipe + 5K-param MLP: **90.4%** — the textbook approach for static pose classification still wins for cost/accuracy ratio
+  - LoRA-tuned Qwen3-VL-8B (transformers eval): **92.3%** — best, but 4× slower per inference
+- Hybrid pipeline ships: MediaPipe+MLP for typical fingerspelling (50ms, ~90%), fine-tuned VLM for motion signs and as fallback when no hand is detected
+- Latency on MI300X: Qwen3-8B composer ~0.5s/call, fine-tuned 8B vision recognizer ~1.3s/call
 
 ### What worked well
-TODO
+- AMD Developer Cloud provisioning was 5 min from "approved" to SSH — credit landed via email and the Quick-Start vLLM image meant zero ROCm setup pain
+- 192 GB HBM3 hosted both the 32B vision model and the 8B composer concurrently (gpu-mem 0.55 + 0.30) with margin for KV cache
+- Fine-tuning + inference + composing on a single MI300X with no swapping or reloading — the multi-tenant story is real
+- The `rocm:latest` Docker image had the entire training stack (torch, transformers, peft, accelerate, datasets) preinstalled and tested
+
+### What we'd flag as friction
+- vLLM 0.17.1's image-preprocessing for Qwen3-VL doesn't exactly match transformers' processor — the LoRA-tuned model that scored 92.3% in transformers eval drops to 63.5% via the OpenAI-compatible vLLM endpoint. This is upstream and not AMD-specific, but it limited how aggressively we could lean on the fine-tune for the live demo
+- The `low-power state` warning in `rocm-smi` while the GPU was idle was cosmetic but confusing — clarifying that "low-power" doesn't mean "stalled" would help first-time users
+- Setting `VLLM_HOST_IP=127.0.0.1` for single-GPU vLLM on a Gloo backend isn't documented in the AMD vLLM Quick-Start; we found it from a vLLM GitHub issue
 
 ### What we'd flag as friction
 TODO

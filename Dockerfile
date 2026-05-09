@@ -27,7 +27,8 @@ COPY --chown=user . /app
 # HF Spaces Docker convention: app must listen on 0.0.0.0:7860
 ENV GRADIO_SERVER_NAME=0.0.0.0 \
     GRADIO_SERVER_PORT=7860 \
-    GRADIO_ANALYTICS_ENABLED=False
+    GRADIO_ANALYTICS_ENABLED=False \
+    SYSTEM=spaces
 EXPOSE 7860
 
 CMD ["python", "app.py"]
