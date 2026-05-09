@@ -21,19 +21,35 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Model files. Override via env for HF Space deploys.
-_MLP_PATH = Path(
-    os.getenv(
-        "SIGNBRIDGE_LANDMARK_MLP_PATH",
-        str(Path(__file__).resolve().parent.parent.parent / "models" / "asl_landmark_mlp.pt"),
-    )
-)
-_HAND_MODEL_PATH = Path(
-    os.getenv(
-        "SIGNBRIDGE_HAND_LANDMARKER_PATH",
-        str(Path(__file__).resolve().parent.parent.parent / "models" / "hand_landmarker.task"),
-    )
-)
+# Weights live in a public HF model repo so the Space repo stays small and
+# free of LFS. Local clones can override via the env vars below for offline
+# tests; the default behaviour is `hf_hub_download` on first call (cached
+# under HF_HOME / ~/.cache/huggingface).
+_HF_REPO = os.getenv("SIGNBRIDGE_CLASSIFIER_HF_REPO", "LucasLooTan/signbridge-asl-classifier")
+_MLP_FILENAME = os.getenv("SIGNBRIDGE_MLP_FILENAME", "asl_landmark_mlp.pt")
+_HAND_FILENAME = os.getenv("SIGNBRIDGE_HAND_FILENAME", "hand_landmarker.task")
+_MLP_LOCAL_OVERRIDE = os.getenv("SIGNBRIDGE_LANDMARK_MLP_PATH")
+_HAND_LOCAL_OVERRIDE = os.getenv("SIGNBRIDGE_HAND_LANDMARKER_PATH")
+
+
+def _resolve_weight(local_override: str | None, filename: str) -> Path | None:
+    """Return a local Path for a weight file, downloading from HF Hub if needed."""
+    if local_override:
+        p = Path(local_override)
+        if p.exists():
+            return p
+        logger.warning("override %s does not exist; falling back to HF Hub.", local_override)
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        logger.warning("huggingface_hub missing; cannot fetch %s.", filename)
+        return None
+    try:
+        local = hf_hub_download(repo_id=_HF_REPO, filename=filename, repo_type="model")
+        return Path(local)
+    except Exception as exc:  # noqa: BLE001 — HF Hub can fail for many reasons
+        logger.warning("hf_hub_download(%s) failed: %s", filename, type(exc).__name__)
+        return None
 
 _lock = threading.Lock()
 _state: dict[str, object] = {"loaded": False, "landmarker": None, "mlp": None, "classes": None}
@@ -57,15 +73,14 @@ def _ensure_loaded() -> bool:
         if _state["loaded"]:
             return _state["landmarker"] is not None and _state["mlp"] is not None
 
-        if not _MLP_PATH.exists():
-            logger.info("landmark MLP weights missing at %s; classifier disabled.", _MLP_PATH)
+        mlp_path = _resolve_weight(_MLP_LOCAL_OVERRIDE, _MLP_FILENAME)
+        if mlp_path is None:
+            logger.info("MLP weights unavailable; landmark classifier disabled.")
             _state["loaded"] = True
             return False
-        if not _HAND_MODEL_PATH.exists():
-            logger.info(
-                "MediaPipe hand_landmarker.task missing at %s; classifier disabled.",
-                _HAND_MODEL_PATH,
-            )
+        hand_path = _resolve_weight(_HAND_LOCAL_OVERRIDE, _HAND_FILENAME)
+        if hand_path is None:
+            logger.info("hand_landmarker.task unavailable; landmark classifier disabled.")
             _state["loaded"] = True
             return False
 
@@ -80,14 +95,14 @@ def _ensure_loaded() -> bool:
             return False
 
         opts = vision.HandLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=str(_HAND_MODEL_PATH)),
+            base_options=BaseOptions(model_asset_path=str(hand_path)),
             num_hands=1,
             min_hand_detection_confidence=0.3,
             min_hand_presence_confidence=0.3,
         )
         landmarker = vision.HandLandmarker.create_from_options(opts)
 
-        ckpt = torch.load(str(_MLP_PATH), map_location="cpu", weights_only=False)
+        ckpt = torch.load(str(mlp_path), map_location="cpu", weights_only=False)
         n_in = int(ckpt["n_in"])
         n_out = int(ckpt["n_out"])
 
