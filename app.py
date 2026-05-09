@@ -7,11 +7,17 @@ Gradio interface it builds. Keep this file thin — real UI lives in
 
 from __future__ import annotations
 
+import logging
 import os
 
 from dotenv import load_dotenv
 
-from signbridge.space import build_demo
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+from signbridge.space import build_demo  # noqa: E402
 
 
 def main() -> None:

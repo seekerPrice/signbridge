@@ -44,12 +44,35 @@ def _resolve_weight(local_override: str | None, filename: str) -> Path | None:
     except ImportError:
         logger.warning("huggingface_hub missing; cannot fetch %s.", filename)
         return None
-    try:
-        local = hf_hub_download(repo_id=_HF_REPO, filename=filename, repo_type="model")
-        return Path(local)
-    except Exception as exc:  # noqa: BLE001 — HF Hub can fail for many reasons
-        logger.warning("hf_hub_download(%s) failed: %s", filename, type(exc).__name__)
-        return None
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN") or None
+    logger.info(
+        "hf_hub_download(%s) attempt: repo=%s token_len=%d",
+        filename, _HF_REPO, len(token) if token else 0,
+    )
+    # First attempt: with explicit token (if set). If that fails with
+    # auth-flavoured RepositoryNotFoundError, retry anonymously — public
+    # repos work without auth, and a stale/invalid token can poison even
+    # public reads.
+    last_exc: Exception | None = None
+    for attempt_token in (token, None):
+        try:
+            local = hf_hub_download(
+                repo_id=_HF_REPO,
+                filename=filename,
+                repo_type="model",
+                token=attempt_token,
+            )
+            logger.info("hf_hub_download(%s) ok via %s", filename, "token" if attempt_token else "anonymous")
+            return Path(local)
+        except Exception as exc:  # noqa: BLE001 — many failure modes
+            last_exc = exc
+            logger.warning(
+                "hf_hub_download(%s) failed (token=%s): %s — %s",
+                filename, "yes" if attempt_token else "no", type(exc).__name__, str(exc)[:300],
+            )
+            if attempt_token is None:
+                break  # already tried anonymously
+    return None
 
 _lock = threading.Lock()
 _state: dict[str, object] = {"loaded": False, "landmarker": None, "mlp": None, "classes": None}
@@ -66,7 +89,11 @@ def _normalize_landmarks(coords3: np.ndarray) -> np.ndarray:
 
 
 def _ensure_loaded() -> bool:
-    """Lazy-load MediaPipe + MLP. Returns True if both ready."""
+    """Lazy-load MediaPipe + MLP. Returns True if both ready.
+
+    Transient failures (HF Hub blip, momentary network) are NOT cached
+    so the next call retries. Only deps-missing (ImportError) is fatal
+    and cached, since it can't fix itself at runtime."""
     if _state["loaded"]:
         return _state["landmarker"] is not None and _state["mlp"] is not None
     with _lock:
@@ -75,13 +102,11 @@ def _ensure_loaded() -> bool:
 
         mlp_path = _resolve_weight(_MLP_LOCAL_OVERRIDE, _MLP_FILENAME)
         if mlp_path is None:
-            logger.info("MLP weights unavailable; landmark classifier disabled.")
-            _state["loaded"] = True
+            logger.warning("MLP weights download failed; will retry on next call.")
             return False
         hand_path = _resolve_weight(_HAND_LOCAL_OVERRIDE, _HAND_FILENAME)
         if hand_path is None:
-            logger.info("hand_landmarker.task unavailable; landmark classifier disabled.")
-            _state["loaded"] = True
+            logger.warning("hand_landmarker.task download failed; will retry on next call.")
             return False
 
         try:
@@ -91,7 +116,7 @@ def _ensure_loaded() -> bool:
             import torch.nn as nn  # type: ignore[import-not-found]
         except ImportError as exc:
             logger.warning("landmark classifier deps missing (%s); disabled.", exc)
-            _state["loaded"] = True
+            _state["loaded"] = True  # cache: deps won't appear at runtime
             return False
 
         opts = vision.HandLandmarkerOptions(

@@ -82,11 +82,8 @@ class _SessionState:
     last_audio_path: str | None = None
 
 
-# Single-user demo: one global latest-frame variable instead of a
-# session-keyed dict. The previous session-keyed approach failed because
-# adding `gr.Request` to a stream-handler signature appears to silently
-# kill the handler in gradio 4.44.1 (TypeError swallowed by the queue
-# worker). No request injection here = no failure surface.
+# Single-user demo: one global latest-frame variable populated by the
+# .stream() handler. The Take-image button reads from here.
 _latest_frame: np.ndarray | None = None
 _frame_lock = threading.Lock()
 _stash_count = 0
@@ -94,6 +91,26 @@ _stash_count = 0
 
 def _new_session() -> _SessionState:
     return _SessionState()
+
+
+def _stash_frame(frame: np.ndarray | None) -> int:
+    """Webcam .stream() callback. Fires every ~500ms (gradio's internal
+    setInterval in Webcam.svelte) once `recording=true`. Writes the
+    latest live frame to the global cache. Returns _stash_count so we
+    can wire a real (hidden) output — empty outputs=[] silently
+    disables the handler in gradio 4.44.1."""
+    global _latest_frame, _stash_count
+    if frame is None:
+        return _stash_count
+    with _frame_lock:
+        _latest_frame = frame
+        _stash_count += 1
+        if _stash_count == 1 or _stash_count % 30 == 0:
+            print(
+                f"[stash] fired #{_stash_count} shape={frame.shape}",
+                flush=True,
+            )
+    return _stash_count
 
 
 def _format_history(signs: list[str]) -> str:
@@ -146,44 +163,26 @@ def _shared_extractor() -> LandmarkExtractor:
         return _extractor_singleton
 
 
-def _stash_frame(frame: np.ndarray | None) -> None:
-    """Webcam .change() callback — writes every live frame to the global
-    `_latest_frame`. Bare signature (no gr.Request, no extra params) so
-    gradio's signature inspection can't fail."""
-    global _latest_frame, _stash_count
-    if frame is None:
-        return
-    with _frame_lock:
-        _latest_frame = frame
-        _stash_count += 1
-        # Log every ~30 frames (~1/sec at 30 fps webcam) so HF run logs
-        # confirm the handler is actually firing.
-        if _stash_count == 1 or _stash_count % 30 == 0:
-            logger.info(
-                "_stash_frame fired %d times; last shape=%s dtype=%s",
-                _stash_count, frame.shape, frame.dtype,
-            )
-
-
 def _capture_sign(state: _SessionState) -> tuple[str, str, _SessionState]:
-    """Take-image button handler. Reads the latest live frame from the
-    global cache, runs recognition, appends to history."""
+    """Take-image button handler. Reads the latest streamed frame from
+    the global cache, runs recognition, appends to history."""
     with _frame_lock:
         frame = _latest_frame
-
-    logger.info(
-        "_capture_sign: frame_present=%s, stash_count=%d",
-        frame is not None, _stash_count,
+    print(
+        f"[capture] stash_count={_stash_count} frame_present={frame is not None}",
+        flush=True,
     )
 
     if frame is None:
         return (
-            "_no frame yet — make sure the camera preview is live and try again_",
+            "_no frame yet — wait a moment for the camera to start streaming, then try again_",
             _format_history(state.sign_history),
             state,
         )
 
     token, confidence = _recognize(frame)
+    print(f"[capture] recognised token={token!r} conf={confidence:.2f}", flush=True)
+
     if not token or confidence < 0.5:
         return (
             "_couldn't recognise that one — try centering the gesture and a plain background_",
@@ -265,12 +264,52 @@ _WEBCAM_BUTTON_LABEL_CSS = """
     font-size: 13px;
     color: #1e1b4b;
 }
+/* Snapshot tab uses streaming + a custom Take-image button. We hide
+   gradio's built-in controls so the user only sees the live preview
+   and our button. A small JS snippet auto-clicks the (hidden) record
+   toggle once after permission is granted, which makes Webcam.svelte
+   start dispatching the .stream() event every 500ms. The
+   "Click to Access Webcam" placeholder is a separate DOM node and
+   stays visible — browsers require a user gesture for getUserMedia(). */
+.signbridge-webcam-snapshot .source-selection,
+.signbridge-webcam-snapshot .controls,
+.signbridge-webcam-snapshot .button-wrap {
+    display: none !important;
+}
+"""
+
+
+# JS injected at app load. Runs in the browser. Polls for gradio's
+# hidden record button inside our snapshot webcam and clicks it once
+# per mount, which flips Webcam.svelte's `recording=true` and starts
+# the .stream() frame loop. Without this, .stream() never fires —
+# gradio gates frame dispatch on the record toggle.
+_AUTO_ARM_STREAM_JS = """
+() => {
+    const SELECTOR = '.signbridge-webcam-snapshot .button-wrap > button';
+    const tick = () => {
+        document.querySelectorAll(SELECTOR).forEach((btn) => {
+            if (btn.dataset.signbridgeArmed) return;
+            // Only arm a freshly-mounted (not-yet-recording) button.
+            const titleDiv = btn.querySelector('div[title]');
+            if (titleDiv && titleDiv.title === 'start recording') {
+                btn.click();
+                btn.dataset.signbridgeArmed = '1';
+                console.log('[signbridge] auto-armed webcam stream');
+            }
+        });
+    };
+    setInterval(tick, 500);
+}
 """
 
 
 def build_demo() -> gr.Blocks:
     with gr.Blocks(
-        title="SignBridge", theme=gr.themes.Soft(), css=_WEBCAM_BUTTON_LABEL_CSS
+        title="SignBridge",
+        theme=gr.themes.Soft(),
+        css=_WEBCAM_BUTTON_LABEL_CSS,
+        js=_AUTO_ARM_STREAM_JS,
     ) as demo:
         gr.Markdown(
             "# 🤟 SignBridge — real-time ASL → English speech\n"
@@ -294,25 +333,27 @@ def build_demo() -> gr.Blocks:
                         gr.HTML(
                             '<div class="signbridge-webcam-help">'
                             '<b>How it works:</b> '
-                            '<b>1.</b> click the webcam once to grant access · '
+                            '<b>1.</b> click the preview once to grant camera access · '
                             '<b>2.</b> sign a letter (A–Z) · '
                             '<b>3.</b> click <b>📸 Take image</b> — recognition is automatic · '
                             '<b>4.</b> repeat for the next letter, then press <b>🔊 Speak</b>.'
                             "</div>"
                         )
+                        # streaming=True keeps the live preview running
+                        # continuously. _AUTO_ARM_STREAM_JS clicks the
+                        # hidden record button after permission grant
+                        # so Webcam.svelte starts dispatching frames
+                        # via the .stream() event (gated on
+                        # `recording=true`). We hide the record/stop
+                        # controls via CSS so the user only sees a
+                        # clean preview + our Take-image button.
                         webcam = gr.Image(
                             sources=["webcam"],
-                            # streaming=True keeps the live preview running
-                            # after the one-time permission grant, so the
-                            # user never sees the access-prompt screen
-                            # again. Frames are stashed in session state via
-                            # the .stream() handler, and the Take-image
-                            # button reads from there.
                             streaming=True,
                             label="Sign here",
                             height=420,
                             type="numpy",
-                            elem_classes=["signbridge-webcam"],
+                            elem_classes=["signbridge-webcam", "signbridge-webcam-snapshot"],
                         )
                         with gr.Row():
                             capture_btn = gr.Button(
@@ -341,13 +382,13 @@ def build_demo() -> gr.Blocks:
                             "Spell out a word letter-by-letter, then press Speak."
                         )
 
-                # Use .change() (not .stream()) — it fires on every value
-                # change which, for a streaming webcam, is every frame.
-                # outputs=[] is required (None doesn't wire the event).
-                webcam.change(
+                # Hidden Number sink for the .stream() handler — empty
+                # outputs=[] silently disables it in gradio 4.44.1.
+                _stash_sink = gr.Number(value=0, visible=False)
+                webcam.stream(
                     fn=_stash_frame,
                     inputs=[webcam],
-                    outputs=[],
+                    outputs=[_stash_sink],
                     show_progress="hidden",
                 )
                 capture_btn.click(
