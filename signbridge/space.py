@@ -82,13 +82,14 @@ class _SessionState:
     last_audio_path: str | None = None
 
 
-# Module-level frame cache, keyed by gradio session_hash. The webcam
-# `.stream()` handler writes here on every frame; the Take-image click
-# handler reads from here. We use a global dict instead of gr.State
-# because gradio 4.44.1 deep-copies state between handlers (so a
-# stream-handler mutation doesn't show up in the click-handler view).
-_frame_cache: dict[str, np.ndarray] = {}
-_frame_cache_lock = threading.Lock()
+# Single-user demo: one global latest-frame variable instead of a
+# session-keyed dict. The previous session-keyed approach failed because
+# adding `gr.Request` to a stream-handler signature appears to silently
+# kill the handler in gradio 4.44.1 (TypeError swallowed by the queue
+# worker). No request injection here = no failure surface.
+_latest_frame: np.ndarray | None = None
+_frame_lock = threading.Lock()
+_stash_count = 0
 
 
 def _new_session() -> _SessionState:
@@ -145,26 +146,35 @@ def _shared_extractor() -> LandmarkExtractor:
         return _extractor_singleton
 
 
-def _stash_frame(frame: np.ndarray | None, request: gr.Request) -> None:
-    """Webcam .stream() callback — writes every live frame to the global
-    cache keyed by gradio session_hash. Returns nothing because no
-    component output needs updating per frame."""
+def _stash_frame(frame: np.ndarray | None) -> None:
+    """Webcam .change() callback — writes every live frame to the global
+    `_latest_frame`. Bare signature (no gr.Request, no extra params) so
+    gradio's signature inspection can't fail."""
+    global _latest_frame, _stash_count
     if frame is None:
         return
-    sid = getattr(request, "session_hash", "default") or "default"
-    with _frame_cache_lock:
-        _frame_cache[sid] = frame
+    with _frame_lock:
+        _latest_frame = frame
+        _stash_count += 1
+        # Log every ~30 frames (~1/sec at 30 fps webcam) so HF run logs
+        # confirm the handler is actually firing.
+        if _stash_count == 1 or _stash_count % 30 == 0:
+            logger.info(
+                "_stash_frame fired %d times; last shape=%s dtype=%s",
+                _stash_count, frame.shape, frame.dtype,
+            )
 
 
-def _capture_sign(
-    state: _SessionState, request: gr.Request
-) -> tuple[str, str, _SessionState]:
+def _capture_sign(state: _SessionState) -> tuple[str, str, _SessionState]:
     """Take-image button handler. Reads the latest live frame from the
-    module-level cache (populated by the .stream() handler), runs
-    recognition, appends to history."""
-    sid = getattr(request, "session_hash", "default") or "default"
-    with _frame_cache_lock:
-        frame = _frame_cache.get(sid)
+    global cache, runs recognition, appends to history."""
+    with _frame_lock:
+        frame = _latest_frame
+
+    logger.info(
+        "_capture_sign: frame_present=%s, stash_count=%d",
+        frame is not None, _stash_count,
+    )
 
     if frame is None:
         return (
@@ -331,13 +341,13 @@ def build_demo() -> gr.Blocks:
                             "Spell out a word letter-by-letter, then press Speak."
                         )
 
-                # Webcam streams continuously while the camera is live —
-                # _stash_frame writes each frame to the global session
-                # cache. Click reads the latest cached frame.
-                webcam.stream(
+                # Use .change() (not .stream()) — it fires on every value
+                # change which, for a streaming webcam, is every frame.
+                # outputs=[] is required (None doesn't wire the event).
+                webcam.change(
                     fn=_stash_frame,
                     inputs=[webcam],
-                    outputs=None,
+                    outputs=[],
                     show_progress="hidden",
                 )
                 capture_btn.click(
