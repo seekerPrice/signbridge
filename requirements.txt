@@ -13,7 +13,7 @@ python-multipart>=0.0.12
 python-dotenv>=1.0
 
 # Imaging
-pillow>=11.0
+pillow>=10.4,<11.0
 numpy>=2.0,<3.0
 opencv-python-headless>=4.10
 
