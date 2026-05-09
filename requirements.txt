@@ -2,7 +2,7 @@
 gradio==4.44.1
 gradio-client==1.3.0
 pydantic>=2.9,<2.10
-huggingface_hub>=0.26,<1.0
+huggingface_hub>=0.26,<0.30
 # Pin starlette to a version where TemplateResponse(name, context) still
 # works — starlette 0.41+ swapped the signature to (request, name, context)
 # which breaks gradio 4.44.1's jinja2 cache key (TypeError: unhashable dict).

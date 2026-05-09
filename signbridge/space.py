@@ -183,8 +183,47 @@ def _clear(state: _SessionState) -> tuple[str, str, str, None, _SessionState]:
     return "", _format_history(state.sign_history), "", None, state
 
 
+_WEBCAM_BUTTON_LABEL_CSS = """
+/* Gradio's gr.Image webcam shows an unlabelled webcam-icon (start) and
+   red-square (stop) inside the preview. Add visible text labels via CSS
+   pseudo-elements so first-time users know what each button does. */
+.signbridge-webcam .source-selection .icon-with-text,
+.signbridge-webcam button[aria-label*="webcam" i]::after,
+.signbridge-webcam button[aria-label*="record" i]::after {
+    content: " Start";
+    margin-left: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4f46e5;
+}
+.signbridge-webcam button[aria-label*="stop" i]::after {
+    content: " Stop";
+    margin-left: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #dc2626;
+}
+/* Make any webcam-control button render its aria-label as visible text. */
+.signbridge-webcam .controls button {
+    min-width: 80px;
+}
+/* Floating tooltip over the webcam pane on first load. */
+.signbridge-webcam-help {
+    background: #eef2ff;
+    border-left: 4px solid #4f46e5;
+    padding: 8px 12px;
+    margin: 6px 0 12px 0;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #1e1b4b;
+}
+"""
+
+
 def build_demo() -> gr.Blocks:
-    with gr.Blocks(title="SignBridge", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(
+        title="SignBridge", theme=gr.themes.Soft(), css=_WEBCAM_BUTTON_LABEL_CSS
+    ) as demo:
         gr.Markdown(
             "# 🤟 SignBridge — real-time ASL → English speech\n"
             "Two people who couldn't communicate, now can. **Snapshot** for "
@@ -204,12 +243,28 @@ def build_demo() -> gr.Blocks:
             with gr.Tab("Snapshot — fingerspelling"):
                 with gr.Row():
                     with gr.Column(scale=3):
+                        gr.HTML(
+                            '<div class="signbridge-webcam-help">'
+                            '<b>How it works:</b> click the webcam icon to '
+                            '<b>Start</b> the camera, sign a letter, then '
+                            'press <b>✋ Capture sign</b> below. Click the '
+                            'red square to <b>Stop</b> the camera.'
+                            "</div>"
+                        )
                         webcam = gr.Image(
                             sources=["webcam"],
-                            streaming=True,
+                            # NOTE: streaming=True is intentionally OFF here.
+                            # With it on, gradio's button-click handlers don't
+                            # receive the current frame — the input value stays
+                            # at the initial None until a stream event fires.
+                            # Without it, the user sees a live webcam preview
+                            # AND the "Capture sign" click reliably sends the
+                            # current frame as the input.
+                            streaming=False,
                             label="Sign here",
                             height=420,
                             type="numpy",
+                            elem_classes=["signbridge-webcam"],
                         )
                         with gr.Row():
                             capture_btn = gr.Button(
@@ -270,10 +325,19 @@ def build_demo() -> gr.Blocks:
                     "The recognizer samples 4 frames from the clip and uses "
                     "motion across them to decide."
                 )
+                gr.HTML(
+                    '<div class="signbridge-webcam-help">'
+                    '<b>Click the red record button to <span style="color:#dc2626">'
+                    'Start</span></b>, hold while signing, then '
+                    '<b>click again to <span style="color:#4f46e5">Stop</span></b>. '
+                    'Press <b>🎬 Submit recording</b> below.'
+                    "</div>"
+                )
                 video_in = gr.Video(
                     sources=["webcam"],
                     label="Hold while signing",
                     height=420,
+                    elem_classes=["signbridge-webcam"],
                 )
                 with gr.Row():
                     submit_video_btn = gr.Button(
