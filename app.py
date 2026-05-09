@@ -17,20 +17,11 @@ from signbridge.space import build_demo
 def main() -> None:
     load_dotenv()
     demo = build_demo()
-    # Bind 0.0.0.0 by default — HF Spaces' reverse proxy expects the app to
-    # listen on the container's external interface, and 127.0.0.1-only would
-    # silently reject all incoming requests on the live Space. For local dev
-    # boot-tests inside sandboxes that can't talk to 0.0.0.0, override with
-    # `SIGNBRIDGE_HOST=127.0.0.1`.
-    host = os.getenv("SIGNBRIDGE_HOST", "0.0.0.0")
-    port = int(os.getenv("SIGNBRIDGE_PORT", "7860"))
-    demo.launch(
-        server_name=host,
-        server_port=port,
-        show_error=True,
-        share=False,
-        prevent_thread_lock=False,
-    )
+    # On HF Spaces the gradio runtime sets GRADIO_SERVER_NAME / SERVER_PORT
+    # in env and auto-launches; passing custom server_name/port can collide
+    # with the pre-startup localhost check. Calling .launch() with no args
+    # is the documented "just works" pattern for HF Spaces.
+    demo.queue().launch()
 
 
 if __name__ == "__main__":
