@@ -82,35 +82,8 @@ class _SessionState:
     last_audio_path: str | None = None
 
 
-# Single-user demo: one global latest-frame variable populated by the
-# .stream() handler. The Take-image button reads from here.
-_latest_frame: np.ndarray | None = None
-_frame_lock = threading.Lock()
-_stash_count = 0
-
-
 def _new_session() -> _SessionState:
     return _SessionState()
-
-
-def _stash_frame(frame: np.ndarray | None) -> int:
-    """Webcam .stream() callback. Fires every ~500ms (gradio's internal
-    setInterval in Webcam.svelte) once `recording=true`. Writes the
-    latest live frame to the global cache. Returns _stash_count so we
-    can wire a real (hidden) output — empty outputs=[] silently
-    disables the handler in gradio 4.44.1."""
-    global _latest_frame, _stash_count
-    if frame is None:
-        return _stash_count
-    with _frame_lock:
-        _latest_frame = frame
-        _stash_count += 1
-        if _stash_count == 1 or _stash_count % 30 == 0:
-            print(
-                f"[stash] fired #{_stash_count} shape={frame.shape}",
-                flush=True,
-            )
-    return _stash_count
 
 
 def _format_history(signs: list[str]) -> str:
@@ -132,16 +105,23 @@ def _recognize(frame: np.ndarray) -> tuple[str, float]:
         extractor = _shared_extractor()
         _, landmarks = extractor.extract(frame)
         if landmarks is None:
+            print("[recognize] holistic: no landmarks detected", flush=True)
             return "", 0.0
-        return classify_landmarks(np.expand_dims(landmarks, axis=0))
+        token, conf = classify_landmarks(np.expand_dims(landmarks, axis=0))
+        print(f"[recognize] holistic-classifier: token={token!r} conf={conf:.2f}", flush=True)
+        return token, conf
 
     # Default 'vlm' mode — first try the landmark classifier, then VLM.
     from signbridge.recognizer.landmark_classifier import predict_letter
 
     token, conf = predict_letter(frame)
+    print(f"[recognize] mediapipe+MLP: token={token!r} conf={conf:.2f}", flush=True)
     if conf >= 0.5:
         return token, conf
-    return recognize_sign_from_frame(frame)
+    print("[recognize] MLP below threshold; falling through to VLM", flush=True)
+    vtoken, vconf = recognize_sign_from_frame(frame)
+    print(f"[recognize] VLM result: token={vtoken!r} conf={vconf:.2f}", flush=True)
+    return vtoken, vconf
 
 
 _extractor_singleton: LandmarkExtractor | None = None
@@ -163,39 +143,55 @@ def _shared_extractor() -> LandmarkExtractor:
         return _extractor_singleton
 
 
-def _capture_sign(state: _SessionState) -> tuple[str, str, _SessionState]:
-    """Take-image button handler. Reads the latest streamed frame from
-    the global cache, runs recognition, appends to history."""
-    with _frame_lock:
-        frame = _latest_frame
+_MIN_CONF_ACCEPT = 0.75   # ≥ this → token accepted into history
+_MIN_CONF_SHOW = 0.50     # below this → "couldn't recognise"
+
+
+def _on_snapshot(
+    frame: np.ndarray | None, state: _SessionState
+) -> tuple[str, str, _SessionState, "gr.components.Image"]:
+    """Webcam .change() callback. Fires once per user snapshot in
+    non-streaming mode. Recognises the frame, appends to history,
+    then returns gr.update(value=None) so the Webcam re-mounts and
+    _AUTO_ACCESS_WEBCAM_JS auto-clicks the access placeholder.
+
+    Bounce guard: when we set value=None below, gradio dispatches
+    another .change() with frame=None. The first branch makes that
+    a no-op so we don't loop forever."""
     print(
-        f"[capture] stash_count={_stash_count} frame_present={frame is not None}",
+        f"[snapshot] frame_present={frame is not None}"
+        + (f" shape={frame.shape}" if frame is not None else ""),
         flush=True,
     )
 
     if frame is None:
-        return (
-            "_no frame yet — wait a moment for the camera to start streaming, then try again_",
-            _format_history(state.sign_history),
-            state,
-        )
+        return ("", _format_history(state.sign_history), state, gr.update())
 
     token, confidence = _recognize(frame)
-    print(f"[capture] recognised token={token!r} conf={confidence:.2f}", flush=True)
+    print(f"[snapshot] recognised token={token!r} conf={confidence:.2f}", flush=True)
 
-    if not token or confidence < 0.5:
-        return (
-            "_couldn't recognise that one — try centering the gesture and a plain background_",
-            _format_history(state.sign_history),
-            state,
+    from signbridge.recognizer import landmark_classifier as lc
+    top3 = list(lc.last_top3)
+    top3_str = ", ".join(f"`{t}` ({c:.0%})" for t, c in top3) if top3 else ""
+
+    if not token or confidence < _MIN_CONF_SHOW:
+        msg = "_couldn't recognise — try centering your hand on a plain background_"
+        if top3_str:
+            msg += f"  \nbest guesses: {top3_str}"
+        return (msg, _format_history(state.sign_history), state, gr.update(value=None))
+
+    if confidence < _MIN_CONF_ACCEPT:
+        msg = (
+            f"_low confidence on **{token}** ({confidence:.0%}) — re-sign with a clearer pose._  \n"
+            f"top alternatives: {top3_str}"
         )
+        return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
     state.sign_history.append(token)
-    return (
-        f"detected: **{token}** ({confidence:.0%})",
-        _format_history(state.sign_history),
-        state,
-    )
+    status = f"detected: **{token}** ({confidence:.0%})"
+    if top3_str:
+        status += f"  \nalternatives: {top3_str}"
+    return (status, _format_history(state.sign_history), state, gr.update(value=None))
 
 
 def _show_landmarks(frame: np.ndarray | None) -> np.ndarray | None:
@@ -207,11 +203,16 @@ def _show_landmarks(frame: np.ndarray | None) -> np.ndarray | None:
 
 def _speak(state: _SessionState) -> tuple[str, str | None, _SessionState]:
     if not state.sign_history:
+        print("[speak] no signs to compose; returning empty.", flush=True)
         return "(no signs captured yet)", None, state
 
+    print(f"[speak] composing from {len(state.sign_history)} tokens: {state.sign_history}", flush=True)
     sentence = compose_sentence(list(state.sign_history))
+    print(f"[speak] composed sentence: {sentence!r}", flush=True)
     state.last_sentence = sentence
+    print("[speak] synthesising speech...", flush=True)
     state.last_audio_path = synthesize_speech(sentence)
+    print(f"[speak] audio_path={state.last_audio_path}", flush=True)
     return sentence, state.last_audio_path, state
 
 
@@ -264,42 +265,45 @@ _WEBCAM_BUTTON_LABEL_CSS = """
     font-size: 13px;
     color: #1e1b4b;
 }
-/* Snapshot tab uses streaming + a custom Take-image button. We hide
-   gradio's built-in controls so the user only sees the live preview
-   and our button. A small JS snippet auto-clicks the (hidden) record
-   toggle once after permission is granted, which makes Webcam.svelte
-   start dispatching the .stream() event every 500ms. The
-   "Click to Access Webcam" placeholder is a separate DOM node and
-   stays visible — browsers require a user gesture for getUserMedia(). */
-.signbridge-webcam-snapshot .source-selection,
-.signbridge-webcam-snapshot .controls,
-.signbridge-webcam-snapshot .button-wrap {
+/* Snapshot tab uses gradio's built-in snapshot camera button as the
+   sole capture trigger. Streaming had to be dropped because HF Space's
+   proxy can't sustain the per-500ms upload rate. Source-select dropdown
+   is hidden to keep the UI clean. */
+.signbridge-webcam-snapshot .source-selection {
     display: none !important;
 }
 """
 
 
-# JS injected at app load. Runs in the browser. Polls for gradio's
-# hidden record button inside our snapshot webcam and clicks it once
-# per mount, which flips Webcam.svelte's `recording=true` and starts
-# the .stream() frame loop. Without this, .stream() never fires —
-# gradio gates frame dispatch on the record toggle.
-_AUTO_ARM_STREAM_JS = """
+# JS injected at app load. Runs in the browser.
+#
+# Non-streaming gr.Image webcam unmounts the Webcam component each time
+# the value clears (gradio's ImageUploader.svelte: shows the captured
+# image when value!=null, shows Webcam only when value==null). Each
+# remount re-renders the "Click to Access Webcam" placeholder. After
+# the first user-gesture grant, the browser remembers permission, so
+# we can programmatically click that placeholder to snap straight back
+# to live preview — making per-letter UX a single click on the camera
+# button instead of click-allow-then-camera.
+_AUTO_ACCESS_WEBCAM_JS = """
 () => {
-    const SELECTOR = '.signbridge-webcam-snapshot .button-wrap > button';
+    const SELECTOR = '.signbridge-webcam-snapshot button[title="grant webcam access" i], .signbridge-webcam-snapshot div[title="grant webcam access" i] button';
+    let firstGrantSeen = false;
     const tick = () => {
         document.querySelectorAll(SELECTOR).forEach((btn) => {
-            if (btn.dataset.signbridgeArmed) return;
-            // Only arm a freshly-mounted (not-yet-recording) button.
-            const titleDiv = btn.querySelector('div[title]');
-            if (titleDiv && titleDiv.title === 'start recording') {
-                btn.click();
-                btn.dataset.signbridgeArmed = '1';
-                console.log('[signbridge] auto-armed webcam stream');
+            if (btn.dataset.signbridgeAutoaccessed) return;
+            if (!firstGrantSeen) {
+                // Wait for the user's first click — getUserMedia needs a
+                // genuine user gesture initially. Mark seen on next tick.
+                firstGrantSeen = true;
+                return;
             }
+            btn.click();
+            btn.dataset.signbridgeAutoaccessed = '1';
+            console.log('[signbridge] auto-accessed re-mounted webcam');
         });
     };
-    setInterval(tick, 500);
+    setInterval(tick, 300);
 }
 """
 
@@ -309,7 +313,7 @@ def build_demo() -> gr.Blocks:
         title="SignBridge",
         theme=gr.themes.Soft(),
         css=_WEBCAM_BUTTON_LABEL_CSS,
-        js=_AUTO_ARM_STREAM_JS,
+        js=_AUTO_ACCESS_WEBCAM_JS,
     ) as demo:
         gr.Markdown(
             "# 🤟 SignBridge — real-time ASL → English speech\n"
@@ -333,34 +337,33 @@ def build_demo() -> gr.Blocks:
                         gr.HTML(
                             '<div class="signbridge-webcam-help">'
                             '<b>How it works:</b> '
-                            '<b>1.</b> click the preview once to grant camera access · '
+                            '<b>1.</b> click the preview once to grant camera access (one-time) · '
                             '<b>2.</b> sign a letter (A–Z) · '
-                            '<b>3.</b> click <b>📸 Take image</b> — recognition is automatic · '
+                            '<b>3.</b> click the <b>📷 camera button</b> in the preview — recognition is automatic, then the preview re-arms · '
                             '<b>4.</b> repeat for the next letter, then press <b>🔊 Speak</b>.'
                             "</div>"
                         )
-                        # streaming=True keeps the live preview running
-                        # continuously. _AUTO_ARM_STREAM_JS clicks the
-                        # hidden record button after permission grant
-                        # so Webcam.svelte starts dispatching frames
-                        # via the .stream() event (gated on
-                        # `recording=true`). We hide the record/stop
-                        # controls via CSS so the user only sees a
-                        # clean preview + our Take-image button.
+                        # streaming=True was deployable locally but HF
+                        # Space's proxy can't sustain the per-500ms
+                        # frame uploads — every upload_file POST hit
+                        # ClientDisconnect, no frame ever reached
+                        # Python. Switching to non-streaming snapshot
+                        # mode: one upload per click, reliable on HF.
+                        # The webcam re-mounts after auto-clear; the
+                        # _AUTO_ACCESS_WEBCAM_JS injected at app load
+                        # re-clicks the access placeholder so per-letter
+                        # UX stays a single click on gradio's snapshot
+                        # camera button (no double-grant per letter).
                         webcam = gr.Image(
                             sources=["webcam"],
-                            streaming=True,
-                            label="Sign here",
+                            label="Sign here — click the 📷 camera button",
                             height=420,
                             type="numpy",
                             elem_classes=["signbridge-webcam", "signbridge-webcam-snapshot"],
                         )
                         with gr.Row():
-                            capture_btn = gr.Button(
-                                "📸 Take image", variant="primary", size="lg"
-                            )
                             clear_btn = gr.Button(
-                                "🧹 Clear", variant="secondary", size="lg"
+                                "🧹 Clear history", variant="secondary", size="lg"
                             )
                         latest = gr.Markdown(value="")
 
@@ -382,19 +385,17 @@ def build_demo() -> gr.Blocks:
                             "Spell out a word letter-by-letter, then press Speak."
                         )
 
-                # Hidden Number sink for the .stream() handler — empty
-                # outputs=[] silently disables it in gradio 4.44.1.
-                _stash_sink = gr.Number(value=0, visible=False)
-                webcam.stream(
-                    fn=_stash_frame,
-                    inputs=[webcam],
-                    outputs=[_stash_sink],
-                    show_progress="hidden",
-                )
-                capture_btn.click(
-                    fn=_capture_sign,
-                    inputs=[state],
-                    outputs=[latest, history, state],
+                # In non-streaming mode, .change() fires once per user
+                # snapshot (camera button click). We get the frame
+                # directly as the input — no global cache or stash
+                # plumbing needed. Auto-clear the value at the end so
+                # gradio re-mounts the Webcam component, which together
+                # with _AUTO_ACCESS_WEBCAM_JS makes per-letter UX one
+                # click.
+                webcam.change(
+                    fn=_on_snapshot,
+                    inputs=[webcam, state],
+                    outputs=[latest, history, state, webcam],
                 )
                 speak_btn.click(
                     fn=_speak,

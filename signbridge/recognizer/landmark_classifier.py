@@ -160,12 +160,21 @@ def _ensure_loaded() -> bool:
         return True
 
 
+# Per-call top-k cache for the most recent prediction. Lets the UI
+# surface alternative letters when the top-1 confidence is borderline.
+last_top3: list[tuple[str, float]] = []
+
+
 def predict_letter(frame: np.ndarray) -> tuple[str, float]:
     """Single-frame letter prediction. Returns (letter, confidence) or ("", 0.0).
 
     `frame` is an HxWx3 uint8 RGB array. Returns ("", 0.0) when no hand is
     detected — the upstream caller should fall through to Qwen3-VL.
+    Side effect: updates `last_top3` with the top-3 alternatives so the UI
+    can show ambiguity when the top-1 is borderline.
     """
+    global last_top3
+    last_top3 = []
     if not _ensure_loaded():
         return "", 0.0
 
@@ -180,6 +189,7 @@ def predict_letter(frame: np.ndarray) -> tuple[str, float]:
     mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
     res = _state["landmarker"].detect(mp_img)  # type: ignore[union-attr]
     if not res.hand_landmarks:
+        print(f"[mp+mlp] hand NOT detected in frame {frame.shape}", flush=True)
         return "", 0.0
 
     lm = res.hand_landmarks[0]
@@ -192,4 +202,13 @@ def predict_letter(frame: np.ndarray) -> tuple[str, float]:
         conf = float(probs[idx].item())
 
     classes = _state["classes"]  # type: ignore[assignment]
+    # Top-3 alternatives for debugging ambiguous classifications.
+    top_vals, top_idx = torch.topk(probs, k=min(3, len(classes)))
+    top3 = [(classes[int(i)], float(v)) for v, i in zip(top_vals, top_idx)]
+    last_top3.clear()
+    last_top3.extend(top3)
+    print(
+        f"[mp+mlp] hand OK; top3={[(t, round(c, 2)) for t, c in top3]}",
+        flush=True,
+    )
     return classes[idx], conf  # type: ignore[index,return-value]
