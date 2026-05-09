@@ -26,12 +26,13 @@ soundfile>=0.12
 # Vision pipeline (MediaPipe Holistic for the pose-debug overlay)
 # Optional at runtime — landmarks.py lazy-imports it.
 mediapipe>=0.10.18
-# Sign classifier (V2; trained on AMD Dev Cloud Day 2)
-# Optional at runtime — classifier.py lazy-imports torch.
-torch>=2.4transformers>=4.45
-# High-quality TTS (Coqui XTTS-v2 — V2; AMD Dev Cloud serves)
-# Optional at runtime — tts.py lazy-imports.
-TTS>=0.22librosa>=0.10
+# Sign classifier (MLP for fingerspelling — runs on Space CPU).
+torch>=2.4
+
+# Note: transformers, TTS (Coqui), and librosa are NOT in the Space
+# requirements. Composer (Qwen3-8B) and TTS (XTTS-v2) are served from
+# AMD Developer Cloud. The local TTS path falls back to a silent-stub
+# WAV when soundfile is the only audio dep available.
 # Dev / test
 pytest>=8.3
 ruff>=0.7
