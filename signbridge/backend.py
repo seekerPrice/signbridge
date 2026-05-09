@@ -141,7 +141,15 @@ def recognize(req: RecognizeRequest) -> RecognizeResponse:
     if not req.frame:
         raise HTTPException(status_code=400, detail="frame must be non-empty")
     decoded = _decode_b64_image(req.frame)
-    token, conf = recognize_sign_from_frame(decoded)
+
+    # Try the MediaPipe + MLP landmark classifier first (88% accurate on
+    # ASL fingerspelling holdout, ~50ms CPU). Fall through to Qwen3-VL
+    # when no hand is detected or confidence is low.
+    from signbridge.recognizer.landmark_classifier import predict_letter
+
+    token, conf = predict_letter(decoded)
+    if conf < 0.5:
+        token, conf = recognize_sign_from_frame(decoded)
     return RecognizeResponse(token=token, confidence=conf)
 
 

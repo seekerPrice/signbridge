@@ -25,18 +25,13 @@ soundfile>=0.12
 
 # Vision pipeline (MediaPipe Holistic for the pose-debug overlay)
 # Optional at runtime — landmarks.py lazy-imports it.
-mediapipe>=0.10.18; python_version < "3.13"
-
+mediapipe>=0.10.18
 # Sign classifier (V2; trained on AMD Dev Cloud Day 2)
 # Optional at runtime — classifier.py lazy-imports torch.
-torch>=2.4; python_version < "3.13"
-transformers>=4.45; python_version < "3.13"
-
+torch>=2.4transformers>=4.45
 # High-quality TTS (Coqui XTTS-v2 — V2; AMD Dev Cloud serves)
 # Optional at runtime — tts.py lazy-imports.
-TTS>=0.22; python_version < "3.13"
-librosa>=0.10; python_version < "3.13"
-
+TTS>=0.22librosa>=0.10
 # Dev / test
 pytest>=8.3
 ruff>=0.7

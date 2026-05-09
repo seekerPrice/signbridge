@@ -93,11 +93,13 @@ def _format_history(signs: list[str]) -> str:
 
 
 def _recognize(frame: np.ndarray) -> tuple[str, float]:
+    """Single-frame recognition for the Snapshot tab (fingerspelling).
+
+    Tries the trained MediaPipe-Hand → MLP classifier first (88% accuracy
+    on the holdout). Falls back to Qwen3-VL when the classifier is missing
+    weights or MediaPipe can't detect a hand.
+    """
     if RECOGNIZER_MODE == "classifier":
-        # V2 path — uses the trained-from-scratch landmark classifier.
-        # Currently lazy-loaded from local weights; falls back to ("", 0.0)
-        # when no weights are present, so nothing breaks if the user picks
-        # this mode without training first.
         from signbridge.recognizer.classifier import classify_landmarks
 
         extractor = _shared_extractor()
@@ -105,6 +107,13 @@ def _recognize(frame: np.ndarray) -> tuple[str, float]:
         if landmarks is None:
             return "", 0.0
         return classify_landmarks(np.expand_dims(landmarks, axis=0))
+
+    # Default 'vlm' mode — first try the landmark classifier, then VLM.
+    from signbridge.recognizer.landmark_classifier import predict_letter
+
+    token, conf = predict_letter(frame)
+    if conf >= 0.5:
+        return token, conf
     return recognize_sign_from_frame(frame)
 
 
