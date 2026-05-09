@@ -256,9 +256,8 @@ def build_demo() -> gr.Blocks:
                             '<b>How it works:</b> '
                             '<b>1.</b> click <b>Click to Access Webcam</b> · '
                             '<b>2.</b> sign a letter (A–Z) · '
-                            '<b>3.</b> click <b>📷 Take Photo</b> on the preview · '
-                            '<b>4.</b> press <b>✋ Capture sign</b> below · '
-                            '<b>5.</b> repeat for the next letter, then press <b>🔊 Speak</b>.'
+                            '<b>3.</b> click <b>📷 Take Photo</b> — recognition is automatic · '
+                            '<b>4.</b> repeat for the next letter, then press <b>🔊 Speak</b>.'
                             "</div>"
                         )
                         webcam = gr.Image(
@@ -276,11 +275,9 @@ def build_demo() -> gr.Blocks:
                             type="numpy",
                             elem_classes=["signbridge-webcam"],
                         )
-                        with gr.Row():
-                            capture_btn = gr.Button(
-                                "✋ Capture sign", variant="primary", size="lg"
-                            )
-                            clear_btn = gr.Button("🧹 Clear", variant="secondary")
+                        clear_btn = gr.Button(
+                            "🧹 Clear", variant="secondary", size="lg"
+                        )
                         latest = gr.Markdown(value="")
 
                     with gr.Column(scale=2):
@@ -301,18 +298,9 @@ def build_demo() -> gr.Blocks:
                             "Spell out a word letter-by-letter, then press Speak."
                         )
 
-                with gr.Accordion("Pose tracking (debug)", open=False):
-                    pose_view = gr.Image(
-                        label="MediaPipe Holistic landmarks", height=320
-                    )
-                    pose_btn = gr.Button("Show pose for current frame")
-                    pose_btn.click(
-                        fn=_show_landmarks,
-                        inputs=[webcam],
-                        outputs=[pose_view],
-                    )
-
-                capture_btn.click(
+                # Auto-fire recognition when the user clicks "📷 Take Photo".
+                # Saves a button — taking the photo IS the capture.
+                webcam.change(
                     fn=_capture_sign,
                     inputs=[webcam, state],
                     outputs=[latest, history, state],
