@@ -140,35 +140,25 @@ def _shared_extractor() -> LandmarkExtractor:
         return _extractor_singleton
 
 
-def _stash_frame(
-    frame: np.ndarray | None, state: _SessionState
-) -> _SessionState:
-    """Webcam .stream() handler — keeps the latest frame on the session.
-
-    The Take-image button reads from `state.latest_frame` so we don't need
-    to wrestle with the gr.Image value (which is None except right after a
-    photo-capture click). With `streaming=True`, this handler fires
-    continuously while the user has the camera on.
-    """
-    if frame is not None:
-        state.latest_frame = frame
-    return state
-
-
 def _capture_sign(
+    frame: np.ndarray | None,
     state: _SessionState,
 ) -> tuple[str, str, _SessionState]:
-    """Take-image button handler. Reads the most recent streamed frame
-    from the session state, runs recognition, appends to history."""
-    frame = state.latest_frame
+    """Take-image button handler.
+
+    With `streaming=True` on the webcam, gradio passes the latest streamed
+    frame as the `frame` input on click. (We confirmed this works as long
+    as the input list includes the webcam component; the earlier failure
+    was caused by gr.Image's value being None when streaming wasn't set.)
+    """
     if frame is None:
         return (
-            "_no frame yet — click the webcam to grant access first_",
+            "_no frame yet — make sure the camera is live and try again_",
             _format_history(state.sign_history),
             state,
         )
 
-    token, confidence = _recognize(frame)  # type: ignore[arg-type]
+    token, confidence = _recognize(frame)
     if not token or confidence < 0.5:
         return (
             "_couldn't recognise that one — try centering the gesture and a plain background_",
@@ -326,19 +316,13 @@ def build_demo() -> gr.Blocks:
                             "Spell out a word letter-by-letter, then press Speak."
                         )
 
-                # Continuously stash the latest webcam frame on the session
-                # state. The Take-image button reads from there. `time_limit`
-                # caps stream duration; gradio re-arms it after each
-                # interaction so the camera stays live for the demo.
-                webcam.stream(
-                    fn=_stash_frame,
-                    inputs=[webcam, state],
-                    outputs=[state],
-                    show_progress="hidden",
-                )
+                # Click reads the latest streamed frame from the webcam
+                # component directly. With streaming=True the gr.Image
+                # value tracks the live preview — no .stream() handler or
+                # session-state stashing required.
                 capture_btn.click(
                     fn=_capture_sign,
-                    inputs=[state],
+                    inputs=[webcam, state],
                     outputs=[latest, history, state],
                 )
                 speak_btn.click(
