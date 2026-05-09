@@ -22,11 +22,26 @@ Submission for the **AMD Developer Hackathon** (LabLab.ai, May 2026) — **Track
 ## How it works
 
 ```
-webcam frames  →  Qwen3-VL-32B  →  Qwen3-8B  →  Coqui XTTS-v2  →  speech
-                  (sign vision)   (composer)   (TTS)
+                  ┌─► MediaPipe Hand → trained MLP    (90% acc, 50ms CPU)
+webcam frame ────┤                       │
+                  └─► fine-tuned Qwen3-VL-8B (LoRA on AMD MI300X)
+                                          │      (92% acc, motion + fallback)
+                                          ▼
+                          Qwen3-8B sentence composer
+                                          │   (AMD MI300X)
+                                          ▼
+                              Coqui XTTS-v2 TTS
+                                          │
+                                          ▼
+                                       🔊 speech
 ```
 
-All three stages run **concurrently on a single AMD Instinct MI300X** via AMD Developer Cloud. Total weights ~34 GB (Qwen3-VL-32B + Qwen3-8B + XTTS-v2) on a 192 GB GPU — fits with margin for KV cache + serving overhead. Both LLMs are Qwen-family, served via vLLM 0.17.1 on ROCm 7.2.
+A hybrid pipeline: a small classical-ML classifier handles static fingerspelling at 90% accuracy with 50 ms CPU latency; a LoRA-fine-tuned Qwen3-VL-8B handles motion-dependent signs and ambiguous static frames; Qwen3-8B turns sign tokens into natural English. The two LLMs run **concurrently on a single AMD Instinct MI300X** via vLLM 0.17.1 on ROCm 7.2 — combined ~34 GB on a 192 GB GPU.
+
+The fine-tune itself was trained on a single MI300X in **54 minutes** with LoRA (rank 16, target q/k/v/o, 2 epochs on 9,786 ASL Alphabet samples). Final eval loss 0.48; gold-set accuracy 92.3% — a 4.8× lift over the 19.2% zero-shot baseline.
+
+- Fine-tuned model: `huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl`
+- Landmark classifier: `huggingface.co/LucasLooTan/signbridge-asl-classifier`
 
 ## V1 use cases
 
@@ -37,7 +52,7 @@ V1 is **one-way**: deaf signs → hearing hears. Reverse direction (speech → o
 
 ## Why AMD
 
-The MI300X's 192 GB HBM3 fits the entire pipeline (Qwen3-VL-32B + Llama-3.1-8B + XTTS-v2) on one GPU with margin. NVIDIA H100 (80 GB) requires sharding, and the V2 plan to upgrade to a 70B reasoner is impossible on H100 without a 3-GPU cluster. Single-GPU concurrency + 5.3 TB/s memory bandwidth is the actual AMD pitch — practical accessibility tools running globally need the cost-and-availability profile that AMD enables.
+The MI300X did three jobs in this project on a single GPU: (1) ran the LoRA fine-tune of Qwen3-VL-8B in 54 minutes; (2) hosts the merged model for inference via vLLM; (3) hosts the Qwen3-8B composer in parallel for sentence composition. 192 GB HBM3 means we never had to reload weights, swap, or shard between training and serving. NVIDIA H100 (80 GB) would require a 3-GPU cluster for the same V2 70B reasoner upgrade — practical accessibility tools running globally need the cost-and-availability profile that AMD enables.
 
 ## Why this matters (business case)
 
