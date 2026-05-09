@@ -28,7 +28,10 @@ COPY --chown=user . /app
 ENV GRADIO_SERVER_NAME=0.0.0.0 \
     GRADIO_SERVER_PORT=7860 \
     GRADIO_ANALYTICS_ENABLED=False \
-    SYSTEM=spaces
+    SYSTEM=spaces \
+    SPACE_ID=lablab-ai-amd-developer-hackathon/signbridge \
+    SPACE_AUTHOR_NAME=lablab-ai-amd-developer-hackathon \
+    SPACE_REPO_NAME=signbridge
 EXPOSE 7860
 
 CMD ["python", "app.py"]
