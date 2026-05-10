@@ -191,6 +191,7 @@ def _on_snapshot(
 
     if not token:
         msg = "**✗ no hand detected** — show your hand clearly in frame and try again"
+        print(f"[snapshot.return.NO_HAND] msg={msg!r}", flush=True)
         return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
     if confidence < _MIN_CONF_ACCEPT:
@@ -200,12 +201,14 @@ def _on_snapshot(
         )
         if top3_str:
             msg += f"\n\n_alternatives: {top3_str}_"
+        print(f"[snapshot.return.DROPPED] msg={msg!r}", flush=True)
         return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
     state.sign_history.append(token)
     msg = f"**✓ added `{token}` ({confidence:.0%})**"
     if top3_str:
         msg += f"\n\n_alternatives: {top3_str}_"
+    print(f"[snapshot.return.ADDED] msg={msg!r} history={state.sign_history}", flush=True)
     return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
 

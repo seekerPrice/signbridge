@@ -12,6 +12,13 @@ import os
 
 from dotenv import load_dotenv
 
+# CRITICAL: load .env BEFORE importing signbridge.* — the recognizer's
+# DEFAULT_VLM_MODEL constant is read from os.environ at module-load
+# time. If we waited until main(), env vars set in .env would never
+# reach the constant and the recognizer would fall back to a model
+# that doesn't exist on the AMD endpoint (404 Not Found).
+load_dotenv()
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -21,7 +28,6 @@ from signbridge.space import build_demo  # noqa: E402
 
 
 def main() -> None:
-    load_dotenv()
     # Make gradio's `_check_localhost` pre-flight skip itself — on HF Spaces
     # Docker the loopback connect-back occasionally races the bind and trips
     # the "When localhost is not accessible" guard. Setting SYSTEM=spaces
