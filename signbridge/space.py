@@ -486,33 +486,45 @@ def build_demo() -> gr.Blocks:
                 )
 
             with gr.Tab("Record sign — full ASL words"):
-                gr.Markdown(
-                    "Record 1.5–2 s of yourself signing a full ASL word "
-                    "(`hello`, `thank_you`, `please`, `eat`, `drink`, …). "
-                    "The recognizer samples 4 frames from the clip and uses "
-                    "motion across them to decide."
-                )
-                gr.HTML(
-                    '<div class="signbridge-webcam-help">'
-                    '<b>How it works:</b> '
-                    '<b>1.</b> click the webcam to access it · '
-                    '<b>2.</b> click <b>● Record</b>, sign for 1.5–2 seconds, click <b>■ Stop</b> · '
-                    '<b>3.</b> press <b>🎬 Submit recording</b> below.'
-                    "</div>"
-                )
-                video_in = gr.Video(
-                    sources=["webcam"],
-                    label="Hold while signing",
-                    height=420,
-                    elem_classes=["signbridge-webcam"],
-                )
+                # Mirror the Snapshot tab's two-column layout so the
+                # gr.Video container is ~60% width instead of full width.
+                # Full-width video + 1280x720 source + object-fit:cover
+                # was cropping ~37% of vertical pixels (head-only view);
+                # constrained-width brings it down to ~17%, matching
+                # the Snapshot tab's framing.
                 with gr.Row():
-                    submit_video_btn = gr.Button(
-                        "🎬 Submit recording",
-                        variant="primary",
-                        size="lg",
-                    )
-                video_status = gr.Markdown(value="")
+                    with gr.Column(scale=3):
+                        video_in = gr.Video(
+                            sources=["webcam"],
+                            label="Hold while signing",
+                            height=420,
+                            elem_classes=["signbridge-webcam"],
+                        )
+                        with gr.Row():
+                            submit_video_btn = gr.Button(
+                                "🎬 Submit recording",
+                                variant="primary",
+                                size="lg",
+                            )
+
+                    with gr.Column(scale=2):
+                        gr.Markdown(
+                            "Record 1.5–2 s of yourself signing a full ASL word "
+                            "(`hello`, `thank_you`, `please`, `eat`, `drink`, …). "
+                            "The recognizer samples 4 frames from the clip and uses "
+                            "motion across them to decide."
+                        )
+                        gr.HTML(
+                            '<div class="signbridge-webcam-help">'
+                            '<b>How it works:</b> '
+                            '<b>1.</b> click the webcam to access it · '
+                            '<b>2.</b> click <b>● Record</b>, sign for 1.5–2 seconds, click <b>■ Stop</b> · '
+                            '<b>3.</b> press <b>🎬 Submit recording</b> below.'
+                            "</div>"
+                        )
+                        video_status = gr.Markdown(
+                            value="", label="Latest result"
+                        )
 
                 def _handle_video(
                     video_path: str | None, sess: _SessionState
