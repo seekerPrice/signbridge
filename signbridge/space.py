@@ -314,22 +314,9 @@ _WEBCAM_BUTTON_LABEL_CSS = """
 .signbridge-webcam-snapshot .source-selection {
     display: none !important;
 }
-/* Make the per-click status banner (latest = gr.Markdown) impossible to
-   miss — bordered box with a heading-like label so users see ✓ added /
-   ✗ dropped right under the camera. */
-#signbridge-latest-status {
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    border-left: 4px solid #4f46e5;
-    border-radius: 6px;
-    padding: 12px 16px;
-    margin: 8px 0;
-    min-height: 56px;
-    font-size: 15px;
-}
-#signbridge-latest-status p {
-    margin: 0;
-}
+/* Status banner styling lives inline on the gr.HTML component now —
+   moved off this CSS block to avoid Gradio elem_id wrapper / CSS-cache
+   issues that prevented the Markdown-based version from showing up. */
 """
 
 
