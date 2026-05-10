@@ -320,13 +320,29 @@ _AUTO_ACCESS_WEBCAM_JS = """
     );
     navigator.mediaDevices.getUserMedia = (constraints) => {
         if (constraints && constraints.video) {
+            // Pick constraints based on which Gradio tab is currently
+            // active. Snapshot tab needs small frames for reliable HF
+            // upload (~50-100KB PNG per click). Record sign tab uses
+            // gr.Video which uploads once per take, so a wider 16:9
+            // 1280x720 source fits the wide container without the
+            // top/bottom crop the user reported.
+            const activeTab = document.querySelector(
+                '[role="tab"][aria-selected="true"]'
+            );
+            const isRecordTab =
+                activeTab && /record sign/i.test(activeTab.textContent || '');
+            const sizeHints = isRecordTab
+                ? { width: { ideal: 1280 }, height: { ideal: 720 } }
+                : { width: { ideal: 640 }, height: { ideal: 480 } };
             const v = constraints.video;
             const newVideo =
-                typeof v === 'object'
-                    ? { ...v, width: { ideal: 640 }, height: { ideal: 480 } }
-                    : { width: { ideal: 640 }, height: { ideal: 480 } };
+                typeof v === 'object' ? { ...v, ...sizeHints } : sizeHints;
             constraints = { ...constraints, video: newVideo };
-            console.log('[signbridge] capped webcam resolution at 640x480');
+            console.log(
+                '[signbridge] capped webcam resolution at',
+                isRecordTab ? '1280x720' : '640x480',
+                '(tab:', isRecordTab ? 'Record sign' : 'Snapshot', ')'
+            );
         }
         return origGetUserMedia(constraints);
     };
