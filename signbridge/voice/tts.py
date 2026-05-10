@@ -72,27 +72,48 @@ class _TTSEngine:
     def synthesize(self, text: str) -> str | None:
         if not text:
             return None
+
+        # Disk cache hit — same text already synthesised this session.
+        cached_wav = self._cache_dir / f"{_cache_key(text)}.wav"
+        if cached_wav.exists():
+            return str(cached_wav)
+        cached_mp3 = self._cache_dir / f"{_cache_key(text)}.mp3"
+        if cached_mp3.exists():
+            return str(cached_mp3)
+
+        # Tier 1: Coqui XTTS-v2 if installed locally (full quality, slow).
         self._ensure_loaded()
-        if self._tts is None:
-            return self._silent_stub(text)
+        if self._tts is not None:
+            try:
+                self._tts.tts_to_file(
+                    text=text,
+                    file_path=str(cached_wav),
+                    language="en",
+                )
+                return str(cached_wav)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "XTTS synthesis failed (%s); falling through to gTTS.",
+                    type(exc).__name__,
+                )
 
-        out_path = self._cache_dir / f"{_cache_key(text)}.wav"
-        if out_path.exists():
-            return str(out_path)
-
+        # Tier 2: gTTS — tiny dep, free, fast (Google's TTS API).
         try:
-            self._tts.tts_to_file(
-                text=text,
-                file_path=str(out_path),
-                language="en",
-                # XTTS-v2 needs a speaker reference; omit to use the default voice.
-            )
+            from gtts import gTTS  # type: ignore[import-not-found]
+            tts = gTTS(text=text, lang="en", tld="com")
+            tts.save(str(cached_mp3))
+            print(f"[tts] gTTS synthesised: {cached_mp3}", flush=True)
+            return str(cached_mp3)
+        except ImportError:
+            logger.warning("gTTS not installed; falling through to silent stub.")
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "XTTS synthesis failed (%s); emitting silent stub.", type(exc).__name__
+                "gTTS synthesis failed (%s); falling through to silent stub.",
+                type(exc).__name__,
             )
-            return self._silent_stub(text)
-        return str(out_path)
+
+        # Tier 3: silent placeholder — better than crashing the audio component.
+        return self._silent_stub(text)
 
     def _silent_stub(self, text: str) -> str | None:
         """Emit a 0.5 s silent WAV so the Gradio audio component has something to play.

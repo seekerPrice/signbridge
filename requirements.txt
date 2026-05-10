@@ -25,7 +25,10 @@ opencv-python-headless>=4.10
 # Inference clients
 openai>=1.54
 
-# Audio (silent-stub fallback uses soundfile)
+# Audio: gTTS = primary (free, fast, ~tiny dep, real audio).
+# Coqui XTTS-v2 would be higher quality but is 2GB and slow on basic CPU.
+gtts>=2.5
+# soundfile is the silent-stub fallback when even gTTS fails.
 soundfile>=0.12
 
 # Vision pipeline (MediaPipe Holistic for the pose-debug overlay)
