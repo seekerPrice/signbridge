@@ -289,6 +289,22 @@ _WEBCAM_BUTTON_LABEL_CSS = """
 .signbridge-webcam-snapshot .source-selection {
     display: none !important;
 }
+/* Make the per-click status banner (latest = gr.Markdown) impossible to
+   miss — bordered box with a heading-like label so users see ✓ added /
+   ✗ dropped right under the camera. */
+#signbridge-latest-status {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #4f46e5;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 8px 0;
+    min-height: 56px;
+    font-size: 15px;
+}
+#signbridge-latest-status p {
+    margin: 0;
+}
 """
 
 
@@ -410,7 +426,10 @@ def build_demo() -> gr.Blocks:
                             clear_btn = gr.Button(
                                 "🧹 Clear history", variant="secondary", size="lg"
                             )
-                        latest = gr.Markdown(value="")
+                        latest = gr.Markdown(
+                            value="_(awaiting capture — click the 📷 camera button above)_",
+                            elem_id="signbridge-latest-status",
+                        )
 
                     with gr.Column(scale=2):
                         history = gr.Markdown(
