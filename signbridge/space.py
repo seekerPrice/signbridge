@@ -167,6 +167,22 @@ def _on_snapshot(
     if frame is None:
         return ("", _format_history(state.sign_history), state, gr.update())
 
+    # Defensive downscale: even if the JS resolution cap didn't apply
+    # (e.g. older browser), keep the recognition path on a manageable
+    # frame. MediaPipe + MLP inference is faster on smaller input too.
+    h, w = frame.shape[:2]
+    if max(h, w) > 720:
+        try:
+            from PIL import Image as PILImage
+            scale = 720 / max(h, w)
+            new_size = (int(w * scale), int(h * scale))
+            frame = np.array(
+                PILImage.fromarray(frame).resize(new_size, PILImage.BILINEAR)
+            )
+            print(f"[snapshot] downscaled to {frame.shape}", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[snapshot] downscale failed: {exc}", flush=True)
+
     token, confidence = _recognize(frame)
     print(f"[snapshot] recognised token={token!r} conf={confidence:.2f}", flush=True)
 
@@ -287,23 +303,51 @@ _WEBCAM_BUTTON_LABEL_CSS = """
 # button instead of click-allow-then-camera.
 _AUTO_ACCESS_WEBCAM_JS = """
 () => {
+    // 1) Cap webcam resolution at 640x480. Gradio 4.44.1 hardcodes
+    //    {ideal: 1920x1440}, which on HF Spaces produces ~1-2MB PNG
+    //    uploads per click — slow enough to hit ClientDisconnect on
+    //    HF's proxy. A 640x480 frame is ~50-100KB and uploads in <1s.
+    //    Monkey-patch getUserMedia BEFORE Gradio's Webcam.svelte calls it.
+    const origGetUserMedia = navigator.mediaDevices.getUserMedia.bind(
+        navigator.mediaDevices
+    );
+    navigator.mediaDevices.getUserMedia = (constraints) => {
+        if (constraints && constraints.video) {
+            const v = constraints.video;
+            const newVideo =
+                typeof v === 'object'
+                    ? { ...v, width: { ideal: 640 }, height: { ideal: 480 } }
+                    : { width: { ideal: 640 }, height: { ideal: 480 } };
+            constraints = { ...constraints, video: newVideo };
+            console.log('[signbridge] capped webcam resolution at 640x480');
+        }
+        return origGetUserMedia(constraints);
+    };
+
+    // 2) After each capture, gradio's Webcam.svelte unmounts and remounts
+    //    the access placeholder. Auto-click it so per-letter UX is just
+    //    one click on the camera button. Wait 1.5s before clicking so
+    //    the in-flight upload XHR has time to actually establish — too
+    //    fast a re-click was racing the upload and causing ClientDisconnect.
     const SELECTOR = '.signbridge-webcam-snapshot button[title="grant webcam access" i], .signbridge-webcam-snapshot div[title="grant webcam access" i] button';
     let firstGrantSeen = false;
+    let lastAutoClickAt = 0;
     const tick = () => {
         document.querySelectorAll(SELECTOR).forEach((btn) => {
             if (btn.dataset.signbridgeAutoaccessed) return;
             if (!firstGrantSeen) {
-                // Wait for the user's first click — getUserMedia needs a
-                // genuine user gesture initially. Mark seen on next tick.
                 firstGrantSeen = true;
                 return;
             }
+            const now = Date.now();
+            if (now - lastAutoClickAt < 1500) return;
             btn.click();
             btn.dataset.signbridgeAutoaccessed = '1';
+            lastAutoClickAt = now;
             console.log('[signbridge] auto-accessed re-mounted webcam');
         });
     };
-    setInterval(tick, 300);
+    setInterval(tick, 500);
 }
 """
 
