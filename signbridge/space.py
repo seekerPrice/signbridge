@@ -143,8 +143,7 @@ def _shared_extractor() -> LandmarkExtractor:
         return _extractor_singleton
 
 
-_MIN_CONF_ACCEPT = 0.75   # ≥ this → token accepted into history
-_MIN_CONF_SHOW = 0.50     # below this → "couldn't recognise"
+_MIN_CONF_ACCEPT = 0.75   # ≥ this → token accepted into history; below → shown as ✗ dropped
 
 
 def _on_snapshot(
@@ -190,21 +189,23 @@ def _on_snapshot(
     top3 = list(lc.last_top3)
     top3_str = ", ".join(f"`{t}` ({c:.0%})" for t, c in top3) if top3 else ""
 
-    if not token or confidence < _MIN_CONF_SHOW:
-        msg = "_couldn't recognise — try centering your hand on a plain background_"
-        if top3_str:
-            msg += f"  \nbest guesses: {top3_str}"
+    if not token:
+        # No hand detected at all by MediaPipe.
+        msg = "✗ **no hand detected** — show your hand clearly in frame and try again"
         return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
     if confidence < _MIN_CONF_ACCEPT:
+        # Predicted, but below acceptance threshold — show it but don't add.
         msg = (
-            f"_low confidence on **{token}** ({confidence:.0%}) — re-sign with a clearer pose._  \n"
-            f"top alternatives: {top3_str}"
+            f"✗ **dropped** `{token}` ({confidence:.0%}) — too uncertain, "
+            f"please re-sign with a clearer pose"
         )
+        if top3_str:
+            msg += f"  \nalternatives: {top3_str}"
         return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
     state.sign_history.append(token)
-    status = f"detected: **{token}** ({confidence:.0%})"
+    status = f"✓ **added** `{token}` ({confidence:.0%})"
     if top3_str:
         status += f"  \nalternatives: {top3_str}"
     return (status, _format_history(state.sign_history), state, gr.update(value=None))
