@@ -252,29 +252,6 @@ def _clear(state: _SessionState) -> tuple[str, str, str, None, _SessionState]:
 
 
 _WEBCAM_BUTTON_LABEL_CSS = """
-/* Gradio's gr.Image webcam shows an unlabelled webcam-icon (start) and
-   red-square (stop) inside the preview. Add visible text labels via CSS
-   pseudo-elements so first-time users know what each button does. */
-.signbridge-webcam .source-selection .icon-with-text,
-.signbridge-webcam button[aria-label*="webcam" i]::after,
-.signbridge-webcam button[aria-label*="record" i]::after {
-    content: " Start";
-    margin-left: 6px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #4f46e5;
-}
-.signbridge-webcam button[aria-label*="stop" i]::after {
-    content: " Stop";
-    margin-left: 6px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #dc2626;
-}
-/* Make any webcam-control button render its aria-label as visible text. */
-.signbridge-webcam .controls button {
-    min-width: 80px;
-}
 /* Floating tooltip over the webcam pane on first load. */
 .signbridge-webcam-help {
     background: #eef2ff;
@@ -292,9 +269,13 @@ _WEBCAM_BUTTON_LABEL_CSS = """
 .signbridge-webcam-snapshot .source-selection {
     display: none !important;
 }
-/* Per-click status banner now lives in the right column as a labeled
-   gr.Markdown — no custom CSS needed; this block previously held style
-   for the gr.HTML/elem_id approach which was abandoned. */
+/* Earlier we injected ::after labels ("Start"/"Stop") on Gradio's
+   webcam control buttons + a min-width to fit them. Both backfired:
+   the button's aria-label is always "start recording" regardless of
+   the actual recording state, so "Start" appeared even mid-recording.
+   The min-width also stretched the post-recording Re-record/Confirm
+   icon buttons into oversized broken-looking blocks. Removed both;
+   Gradio's stock icons are clear enough on their own. */
 """
 
 
