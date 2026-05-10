@@ -6,43 +6,45 @@
 
 ---
 
-## Project Title (≤70 chars)
+## Project Title (form max: 50 chars, min 5)
 
 ```
-SignBridge — Real-time ASL → speech, fine-tuned Qwen3-VL on AMD MI300X
+SignBridge — fine-tuned Qwen3-VL on AMD MI300X
 ```
 
-(70 characters; leads with the Track 2 fine-tune story.)
+(47 characters; leads with Qwen + AMD for both the Qwen Special Reward and Track 3 narratives.)
 
 ---
 
-## Short Description (~150 chars)
+## Short Description (form max: 255 chars, min 50)
 
 ```
 Two people who couldn't communicate, now can. Real-time ASL → English speech, powered by Qwen3-VL we fine-tuned on AMD MI300X.
 ```
 
-(132 characters.)
+(126 characters — fits comfortably.)
 
 ---
 
-## Long Description (~350 words)
+## Long Description (form max: 2000 chars, min 600)
 
 ```
 SignBridge is a real-time American Sign Language → English speech translator built for the AMD Developer Hackathon, Track 3 (Vision & Multimodal AI). We fine-tuned Qwen3-VL-8B on a single AMD Instinct MI300X and serve it natively through vLLM's video understanding API.
 
 The user signs at the webcam — fingerspelled letters (Snapshot tab) or full motion words (Record sign tab) — and SignBridge replies in spoken English. Two people who couldn't communicate, now can.
 
-Architecture: a hybrid pipeline. (1) MediaPipe Hand → trained MLP classifier handles static fingerspelling at 90% accuracy and 50ms latency on CPU — the textbook approach for static-pose tasks. (2) For motion words the recorded webcam clip is transcoded by ffmpeg and sent natively to a LoRA-fine-tuned Qwen3-VL-8B via vLLM's video_url block — Qwen3-VL processes the entire clip with its own temporal encoder rather than us pre-sampling frames. The fine-tune was 54 minutes on a single AMD Instinct MI300X and lifts ASL accuracy from 19% zero-shot to 92% in transformers eval. (3) Qwen3-8B composes the recognised sign tokens into natural English; gTTS turns the sentence into speech. Both LLMs run concurrently on the same MI300X via vLLM 0.17.1 on ROCm 7.2.
+Architecture: (1) MediaPipe Hand → trained MLP classifier handles static fingerspelling at 90% accuracy, ~50 ms on CPU. (2) For motion words the webcam clip is transcoded with ffmpeg and sent natively to a LoRA-fine-tuned Qwen3-VL-8B via vLLM's video_url block — Qwen3-VL processes the clip with its own temporal encoder, no manual frame sampling. The 54-minute LoRA on a single MI300X lifts ASL accuracy from 19% zero-shot to 92% in transformers eval. (3) Qwen3-8B composes recognised tokens into English; gTTS speaks it. Both LLMs run concurrently on the same MI300X via vLLM 0.17.1 on ROCm 7.2.
 
-The MI300X did three jobs in this project on a single GPU: (1) ran the LoRA fine-tune in 54 minutes; (2) hosts the merged Qwen3-VL-8B for inference; (3) hosts the 8B composer in parallel. 192 GB HBM3 means we never had to reload weights or shard. The same workload on NVIDIA H100 (80 GB) would need a 3-GPU cluster.
+One MI300X did three jobs on one GPU: ran the LoRA fine-tune (54 min), hosts the merged Qwen3-VL-8B for inference, and hosts the 8B composer in parallel. 192 GB HBM3 means no swapping or sharding. The same workload on H100 (80 GB) needs a 3-GPU cluster.
 
-Fine-tune artefacts (verifiable by judges): the merged Qwen3-VL-8B-ASL is public at huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl. The MediaPipe-MLP classifier is at huggingface.co/LucasLooTan/signbridge-asl-classifier. Both pulled at runtime via hf_hub_download.
+Fine-tune artefacts (judge-verifiable): merged Qwen3-VL-8B-ASL at huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl; MediaPipe-MLP classifier at huggingface.co/LucasLooTan/signbridge-asl-classifier. Both pulled at runtime via hf_hub_download.
 
-Why this matters: ASL interpreters cost $50–200 per hour and are scarce. Sorenson VRS books $4B+ in annual revenue filling this gap. SignBridge is an open-source MIT-licensed substrate that any Deaf-led NGO, school, ministry, or enterprise can deploy on their own AMD compute.
+Why it matters: ASL interpreters cost $50–200/hr and are scarce. Sorenson VRS books $4B+/yr filling this gap. SignBridge is MIT-licensed open source — any Deaf-led NGO, school, ministry can self-host on their own AMD compute. V1 is ASL-only by design; sign languages aren't interchangeable.
 
-V1 is ASL-only by design — sign languages aren't interchangeable, and Deaf-led teams should own their own deployments. Built solo by Lucas Loo Tan Yu Heng, May 5–11, 2026.
+Built solo by Lucas Loo Tan Yu Heng, May 5–11, 2026.
 ```
+
+(~1980 chars — fits the 2000 max with ~20 char buffer.)
 
 ---
 
