@@ -9,6 +9,24 @@ pinned: false
 thumbnail: assets/cover.png
 license: mit
 short_description: Real-time ASL → English speech on AMD MI300X.
+tags:
+  - accessibility
+  - sign-language
+  - asl
+  - vision
+  - multimodal
+  - speech-synthesis
+  - qwen
+  - qwen3-vl
+  - amd
+  - amd-mi300x
+  - rocm
+  - vllm
+  - lora
+  - fine-tuning
+  - mediapipe
+  - gradio
+  - hackathon
 ---
 
 # SignBridge — real-time ASL → speech
