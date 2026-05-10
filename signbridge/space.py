@@ -510,16 +510,19 @@ def build_demo() -> gr.Blocks:
                 def _handle_video(
                     video_path: str | None, sess: _SessionState
                 ) -> tuple[str, str, _SessionState]:
-                    frames = _sample_frames_from_video(video_path, n_frames=4)
-                    if len(frames) < 2:
+                    if not video_path:
                         return (
-                            "_couldn't read enough frames — try recording again_",
+                            "_no recording received — try again_",
                             _format_history(sess.sign_history),
                             sess,
                         )
-                    from signbridge.recognizer.vlm import recognize_sign_from_frames
+                    # Direct video_url to vLLM (Qwen3-VL native video
+                    # understanding) — replaces the prior frame-sampling
+                    # path. Validated 2026-05-10 against the deployed
+                    # signbridge-qwen3vl-8b-asl endpoint.
+                    from signbridge.recognizer.vlm import recognize_sign_from_video
 
-                    token, confidence = recognize_sign_from_frames(frames)
+                    token, confidence = recognize_sign_from_video(video_path)
                     if not token or confidence < 0.5:
                         return (
                             "_couldn't recognise that one — try slower, plain background_",

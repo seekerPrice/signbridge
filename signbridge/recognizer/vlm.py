@@ -22,6 +22,9 @@ import io
 import logging
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 from functools import lru_cache
 
 import numpy as np
@@ -207,6 +210,87 @@ def recognize_sign_from_frames(frames: list[np.ndarray]) -> tuple[str, float]:
         # Same credential-leak guard as the single-frame path.
         logger.warning("multi-frame VLM recognition failed: %s", type(exc).__name__)
         return "", 0.0
+
+    if token in {"", "unknown"} or token not in _VLM_VOCAB_SET:
+        return "", 0.0
+    return token, 0.85
+
+
+def recognize_sign_from_video(video_path: str) -> tuple[str, float]:
+    """Run the VLM on a recorded video clip via vLLM's video_url block.
+
+    Pipeline: gradio webm → ffmpeg downscale (480p, 8 fps, ≤4 s, no audio,
+    H.264 mp4) → base64 data URL → Qwen3-VL native video understanding.
+
+    Why ffmpeg first (live-tested 2026-05-10 against the deployed
+    signbridge-qwen3vl-8b-asl endpoint):
+    - Direct webm upload fails — vLLM's opencv backend can't read VP8/VP9
+      metadata, returns nonsense total_num_frames and Qwen3VLProcessor
+      throws BadRequestError.
+    - The deployed model has max_model_len=8192. A 10s/1080p video blows
+      past that with a -3513 max_tokens budget. 480p @ 8fps capped at 4s
+      gives ~1680 prompt_tokens, leaving headroom.
+
+    Returns (token, confidence). 0.85 if the model emits an in-vocab
+    token, 0.0 otherwise.
+    """
+    client, model = _resolve_client()
+    if client is None:
+        return "", 0.0
+
+    if shutil.which("ffmpeg") is None:
+        logger.warning("ffmpeg not on PATH; can't transcode video for VLM.")
+        return "", 0.0
+
+    tmp_mp4 = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp_mp4.close()
+    mp4_path = tmp_mp4.name
+    try:
+        ff = subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", video_path,
+                "-vf", "scale=480:-2,fps=8",
+                "-c:v", "libx264", "-preset", "ultrafast",
+                "-an", "-t", "4",
+                mp4_path,
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+        if ff.returncode != 0:
+            logger.warning(
+                "ffmpeg transcode failed (rc=%d): %s",
+                ff.returncode, ff.stderr[-300:],
+            )
+            return "", 0.0
+
+        with open(mp4_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+        data_url = f"data:video/mp4;base64,{b64}"
+
+        resp = client.chat.completions.create(  # type: ignore[attr-defined]
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": build_multi_frame_prompt(8)},
+                        {"type": "video_url", "video_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            temperature=0.0,
+            max_tokens=10,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+        token = _normalise(raw)
+    except Exception as exc:  # noqa: BLE001 — broad at the boundary on purpose
+        logger.warning("video VLM recognition failed: %s", type(exc).__name__)
+        return "", 0.0
+    finally:
+        try:
+            os.unlink(mp4_path)
+        except OSError:
+            pass
 
     if token in {"", "unknown"} or token not in _VLM_VOCAB_SET:
         return "", 0.0
