@@ -40,11 +40,11 @@ Hard rule: **no slide-by-slide voice-over reading**. The demo should *play live*
 **Beat 2A — Fingerspelling (0:25 → 0:55):**
 
 **Visual (split screen recommended):** Left = your face/hand on webcam, right = the Gradio app receiving frames.
-- Sign **L** clearly. Click **Capture sign**. App shows "detected: L (85%)".
-- Sign **U**. Capture.
-- Sign **C**. Capture.
-- Sign **A**. Capture.
-- Sign **S**. Capture.
+- Sign **L** clearly. Click the **📷 camera button** in the preview. App shows "✓ added L (98%)".
+- Sign **U**. Click 📷 again.
+- Sign **C**. 📷.
+- Sign **A**. 📷.
+- Sign **S**. 📷.
 - Click **🔊 Speak**. App composes → speaks: **"Lucas."**
 
 **Voice-over during this beat:**
@@ -75,12 +75,16 @@ Repeat one more sign for variety: **THANK_YOU**.
 
 **Visual:** Static slide showing the pipeline:
 ```
-Webcam frames → Qwen3-VL-8B (vision) → Llama-3.1-8B (composer) → XTTS-v2 (speech)
-                            All on a single AMD Instinct MI300X
+Webcam recording → ffmpeg → fine-tuned Qwen3-VL-8B (native video_url)
+                                      ↓
+                              Qwen3-8B (composer)
+                                      ↓
+                                gTTS (speech)
+                  Both LLMs concurrent on a single AMD Instinct MI300X
 ```
 
 **Voice-over:**
-> "Under the hood: Qwen3-VL-8B reads each frame, Llama-3.1 composes the sentence, XTTS speaks it — all running concurrently on a single AMD Instinct MI300X. Vision, reasoning, and voice on one GPU."
+> "Under the hood: our fine-tuned Qwen3-VL-8B receives the recorded clip natively via vLLM's video_url block, Qwen3-8B composes the sentence, gTTS speaks it — both Qwen models running concurrently on a single AMD Instinct MI300X. Vision and reasoning on one GPU."
 
 **Beat 3B — The MI300X comparison (1:55 → 2:15):**
 

@@ -495,8 +495,9 @@ def build_demo() -> gr.Blocks:
                         gr.Markdown(
                             "Record 1.5–2 s of yourself signing a full ASL word "
                             "(`hello`, `thank_you`, `please`, `eat`, `drink`, …). "
-                            "The recognizer samples 4 frames from the clip and uses "
-                            "motion across them to decide."
+                            "The recognizer sends the video directly to our "
+                            "LoRA-fine-tuned **Qwen3-VL-8B** on **AMD Instinct "
+                            "MI300X** for native motion understanding."
                         )
                         gr.HTML(
                             '<div class="signbridge-webcam-help">'
@@ -551,7 +552,7 @@ def build_demo() -> gr.Blocks:
                 f"({'VLM via OpenAI-compatible endpoint' if RECOGNIZER_MODE == 'vlm' else 'trained landmark classifier'})\n"
                 f"- **Provider:** `{os.getenv('SIGNBRIDGE_PROVIDER', 'amd')}` "
                 f"(set `SIGNBRIDGE_PROVIDER=openai|hf|amd` in `.env`)\n"
-                f"- **Composer model:** `{os.getenv('SIGNBRIDGE_COMPOSER_MODEL', 'meta-llama/Llama-3.1-8B-Instruct')}`\n"
+                f"- **Composer model:** `{os.getenv('SIGNBRIDGE_COMPOSER_MODEL', 'Qwen/Qwen3-8B')}`\n"
                 f"- **TTS model:** `{os.getenv('SIGNBRIDGE_TTS_MODEL', 'tts_models/multilingual/multi-dataset/xtts_v2')}`\n"
             )
 

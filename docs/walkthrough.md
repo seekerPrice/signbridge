@@ -8,33 +8,43 @@
 ## What we built
 
 A real-time webcam-based ASL → English speech translator. A deaf user signs
-into the webcam; the pipeline (MediaPipe Holistic → trained sign classifier
-→ Llama-3.1-8B sentence composer → Coqui XTTS-v2) returns spoken English
-in under 2 seconds. Designed to fit Track 3 (Vision & Multimodal AI) with
-the entire model stack running concurrently on a single AMD Instinct MI300X.
+into the webcam; the pipeline (MediaPipe Hand → trained MLP for static
+fingerspelling, OR webcam-clip → ffmpeg → fine-tuned Qwen3-VL-8B native
+video → Qwen3-8B composer → gTTS) returns spoken English in under 2
+seconds. Designed to fit Track 3 (Vision & Multimodal AI) with both LLMs
+running concurrently on a single AMD Instinct MI300X.
 
 ## Why AMD MI300X
 
-- 192 GB HBM3 — the trained classifier (~20 MB), Llama-3.1-8B (~16 GB FP16),
-  XTTS-v2 (~2 GB), and (V2 stretch) Whisper-large-v3 (~3 GB) all fit
-  concurrently with margin for KV cache.
+- 192 GB HBM3 — the trained MLP classifier (~478 KB), fine-tuned
+  Qwen3-VL-8B (~16 GB FP16), Qwen3-8B composer (~16 GB FP16), and
+  (V2 stretch) Whisper-large-v3 (~3 GB) all fit concurrently with margin
+  for KV cache.
 - 5.3 TB/s memory bandwidth — bandwidth-bound streaming workload (many
-  small inferences per second on the classifier + TTS chunked decode + LLM
-  next-token) is exactly what bandwidth wins.
+  small inferences per second on the MLP + LLM next-token + Qwen3-VL
+  vision encoder) is exactly what bandwidth wins.
 
 ## Architecture
 
 ```
-webcam frames → MediaPipe Holistic → trained classifier
-                  (CPU-fast)            (TorchScript on MI300X)
-                                              │
-                                              ▼
-                                  Llama-3.1-8B sentence composer
-                                       (vLLM on MI300X)
-                                              │
-                                              ▼
-                                          XTTS-v2 → audio
-                                       (XTTS on MI300X)
+Snapshot tab (fingerspelling):
+  webcam frame → MediaPipe Hand → trained MLP classifier
+                   (CPU-fast)        (PyTorch on CPU, ~50 ms)
+
+Record sign tab (motion words):
+  webcam recording → ffmpeg (480p, 8 fps, ≤4 s, H.264)
+                          ↓
+                   vLLM video_url block on AMD MI300X port 8000
+                          ↓
+              fine-tuned Qwen3-VL-8B (native video understanding)
+
+Both paths converge:
+                                   ↓
+                          Qwen3-8B sentence composer
+                          (vLLM on MI300X port 8001)
+                                   ↓
+                                  gTTS
+                          (Google free TTS, MP3)
 ```
 
 ## Models
@@ -45,7 +55,7 @@ webcam frames → MediaPipe Holistic → trained classifier
 | Static-letter classifier (Snapshot tab) | **trained-from-scratch MLP** on hand-landmark vectors → 26 ASL letters | 3-layer MLP (63→256→256→128→26), 5K trainable params, GELU+dropout. **88.0% test accuracy** on a 1,727-image holdout, **90.4% on the gold set**. Weights at `huggingface.co/LucasLooTan/signbridge-asl-classifier` |
 | Motion-sign + fallback recognizer | **fine-tuned `Qwen/Qwen3-VL-8B-Instruct`** | LoRA fine-tune on AMD MI300X (rank 16, target q/k/v/o, 2 epochs, 54 min wall-clock on a single MI300X). Eval loss 0.48, transformers gold-set accuracy 92.3%. Merged adapter pushed to `huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl` (17.5 GB) |
 | Sentence composer | `Qwen/Qwen3-8B` | Pulled from HF Hub; served on MI300X via vLLM. Used for every Speak click — AMD is in the critical path |
-| Text-to-speech | `coqui/XTTS-v2` | Multilingual; we use English V1. Falls back to a silent stub WAV when Coqui isn't installed |
+| Text-to-speech | `gTTS` (Google's free TTS) | Tiny dependency, no model download, MP3 output in <1 s. Coqui XTTS-v2 path is preserved as Tier 1 fallback when installed locally |
 
 ## Datasets
 
@@ -91,16 +101,16 @@ TODO
 
 ## Why AMD MI300X — concretely
 
-The pipeline (MediaPipe Holistic + Qwen3-VL-8B + Llama-3.1-8B + Coqui XTTS-v2)
+The pipeline (MediaPipe Hand + fine-tuned Qwen3-VL-8B + Qwen3-8B composer + gTTS)
 fits comfortably on a single MI300X with KV-cache headroom. The same workload
 on NVIDIA forces sharding once we add the V2 reasoner.
 
 | Component | Weights (FP16) | MI300X 1× (192 GB) | H100 80 GB | H200 141 GB |
 |---|---|---|---|---|
-| Qwen3-VL-8B (vision) | ~16 GB | ✅ fits | ✅ | ✅ |
-| Llama-3.1-8B (composer) | ~16 GB | ✅ fits | ✅ | ✅ |
+| Fine-tuned Qwen3-VL-8B (vision, native video) | ~16 GB | ✅ fits | ✅ | ✅ |
+| Qwen3-8B (composer) | ~16 GB | ✅ fits | ✅ | ✅ |
 | Whisper-large-v3 (V2 reverse direction) | ~3 GB | ✅ fits | ⚠ tight | ✅ |
-| Coqui XTTS-v2 (TTS) | ~2 GB | ✅ fits | ⚠ tight | ✅ |
+| gTTS (no GPU footprint — Python-side cloud call) | n/a | ✅ | ✅ | ✅ |
 | (V2) Llama-3.1-70B FP8 reasoner upgrade | ~70 GB | ✅ still fits | ❌ doesn't fit at all | ⚠ FP8 only, no headroom |
 | **Concurrent serving + KV cache** | ✅ comfortable | ❌ requires sharding | ⚠ tight | ✅ |
 
@@ -153,17 +163,18 @@ Three principles, drawn from the Deaf-led literature on sign-language AI:
 Target: ≤ 2 s from end-of-sign to start of speech.
 
 Measured on a single MI300X (Day 3):
-- MediaPipe Holistic per frame: TODO ms
-- Classifier per window: TODO ms
-- Llama-3.1-8B sentence composition (≤ 30 tokens): TODO ms
-- XTTS-v2 first-audio-chunk: TODO ms
+- MediaPipe Hand detection per frame: ~50 ms (CPU)
+- Trained MLP per landmark vector: ~5 ms (CPU)
+- Fine-tuned Qwen3-VL-8B per recording (native video, ~1680 prompt tokens): ~1-2 s
+- Qwen3-8B sentence composition (≤ 30 tokens): ~300 ms
+- gTTS first-audio-chunk: ~500 ms (single round-trip to Google)
 
 ## MI300X vs NVIDIA H100 — the AMD pitch
 
 | Item | MI300X (1 GPU) | H100 (1 GPU) | H100 cluster needed |
 |---|---|---|---|
-| Llama-3.1-8B FP16 weights | ✅ fits with margin | ✅ fits with margin | 1× |
-| + XTTS-v2 + Whisper-large-v3 + classifier | ✅ all concurrent | ⚠️ tight (~28 GB total + KV) | likely 1× but no headroom |
+| Fine-tuned Qwen3-VL-8B + Qwen3-8B (both FP16) | ✅ fits with margin | ⚠️ tight (~32 GB) | maybe 1×, no headroom |
+| + Whisper-large-v3 + MLP classifier | ✅ all concurrent | ⚠️ tight (~35 GB total + KV) | likely 1× but no headroom |
 | + 70B reasoner upgrade (V2) | ✅ 70B FP8 ~70 GB still fits | ❌ doesn't fit at all | ≥3× |
 
 The single-GPU concurrency story is the AMD pitch. This V1 fits on H100;

@@ -66,13 +66,14 @@ We fine-tuned Qwen3-VL-8B on a single MI300X — 54 minutes, 92% accuracy.
        │      └─ falls through to ↓ when no hand detected
        │
        └─►  Fine-tuned Qwen3-VL-8B (LoRA on MI300X)
-              ── handles motion signs and ambiguous static frames
+              ── webcam clip → ffmpeg → vLLM video_url block
+              ── Qwen3-VL native temporal encoder (no manual frame sampling)
                                        │
                                        ▼
               [ Qwen3-8B composer ── sign tokens → English ]
                                        │
                                        ▼
-              [ Coqui XTTS-v2 ── speech synthesis ]
+              [ gTTS ── free, fast speech synthesis ]
                                        │
                                        ▼
                               [ Audio out ]
@@ -84,8 +85,10 @@ We fine-tuned Qwen3-VL-8B on a single MI300X — 54 minutes, 92% accuracy.
 |---|---|---|---|
 | Fine-tuned Qwen3-VL-8B | ~16 GB | ✅ fits | ✅ |
 | Qwen3-8B composer | ~16 GB | ✅ fits | ✅ |
-| XTTS-v2 + Whisper (V2) | ~5 GB | ✅ fits | ⚠ tight |
+| Whisper (V2 stretch) | ~3 GB | ✅ fits | ⚠ tight |
 | (V2) **Llama-3.1-70B FP8 reasoner** | ~70 GB | **✅ still fits** | **❌ doesn't fit at all** |
+
+(gTTS runs as a small Python call from the Space; no GPU memory.)
 
 **The MI300X did three jobs in this project:** (1) ran the LoRA fine-tune in 54 min, (2) hosts the merged 8B model for inference, (3) hosts the 8B composer in parallel — all on one GPU. That's the AMD pitch.
 
@@ -124,18 +127,18 @@ The 2–3 minute demo video, looping, autoplay-on-slide-show.
 ## Slide 6.5 — Qwen3-VL is the brain
 
 **Headline:**
-Qwen3-VL-8B-Instruct: the visual intelligence behind every sign.
+LoRA-fine-tuned Qwen3-VL-8B — the visual intelligence behind every sign.
 
 **Body bullets:**
-- The recognizer is **Qwen3-VL-8B-Instruct** — Alibaba's open Qwen-VL family, served from Hugging Face Hub.
-- We feed it **multi-image bursts** (4 frames over 1.5 s) for motion-dependent signs like HELLO and THANK_YOU — single-frame models fundamentally cannot translate ASL.
-- **Closed-vocabulary forcing** + **sequential frame markers** (NVIDIA video-VLM pattern) keep Qwen on-rails for the 87-token sign vocab. No fine-tuning needed — Qwen3-VL is strong enough zero-shot.
-- Llama-3.1-8B then composes Qwen's tokens into grammatical English; XTTS-v2 speaks it.
+- The recognizer is **our LoRA-fine-tuned Qwen3-VL-8B** (`huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl`), trained in 54 minutes on a single AMD Instinct MI300X. Lifts ASL accuracy from **19% zero-shot → 92%**.
+- For motion signs (HELLO, THANK_YOU, PLEASE, EAT) we send the **whole recorded clip natively** to Qwen3-VL via vLLM's `video_url` content block — Qwen3-VL's own temporal encoder handles the motion. No manual frame sampling.
+- **Closed-vocabulary forcing** + domain priming keep Qwen on-rails for the 87-token sign vocab.
+- **Qwen3-8B** then composes Qwen-VL's tokens into grammatical English (also on the MI300X via vLLM, separate port); **gTTS** synthesises the spoken sentence.
 
 **Closer:**
 Qwen3-VL is the only thing in the pipeline making the visual judgement. The rest is plumbing.
 
-*Visual: a single screenshot of `signbridge/recognizer/vlm.py` showing the multi-frame Qwen call, alongside an arrow into a "detected: HELLO (85%)" overlay.*
+*Visual: a single screenshot of `signbridge/recognizer/vlm.py` showing the video_url Qwen call, alongside an arrow into a "detected: HELLO (85%)" overlay.*
 
 ---
 

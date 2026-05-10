@@ -27,15 +27,15 @@ Two people who couldn't communicate, now can. Real-time ASL → English speech, 
 ## Long Description (no hard limit, ~300 words is the sweet spot)
 
 ```
-SignBridge is a real-time American Sign Language to English speech translator built for the AMD Developer Hackathon, Track 3 (Vision & Multimodal AI). We fine-tuned Qwen3-VL-8B for ASL fingerspelling on a single AMD Instinct MI300X.
+SignBridge is a real-time American Sign Language to English speech translator built for the AMD Developer Hackathon, Track 3 (Vision & Multimodal AI). We fine-tuned Qwen3-VL-8B on a single AMD Instinct MI300X and serve it natively through vLLM's video understanding API.
 
 The user signs at the webcam — either fingerspelled letters (Snapshot tab) or full motion words (Record sign tab) — and SignBridge replies in spoken English. Two people who couldn't communicate, now can.
 
-Architecture: a hybrid pipeline. (1) MediaPipe Hand → trained MLP classifier handles static fingerspelling at 90% accuracy and 50ms latency on CPU. (2) A LoRA-fine-tuned Qwen3-VL-8B (trained in 54 minutes on a single AMD Instinct MI300X — 92% accuracy in transformers eval) handles motion-dependent signs and acts as a fallback for the static classifier. (3) Qwen3-8B composes the recognised sign tokens into natural English; Coqui XTTS-v2 turns the sentence into speech. Both LLMs run concurrently on the same MI300X via vLLM. The 192 GB HBM3 of one MI300X holds the entire pipeline with margin — the same workload on NVIDIA H100 needs three GPUs.
+Architecture: a hybrid pipeline. (1) MediaPipe Hand → trained MLP classifier handles static fingerspelling at 90% accuracy and 50ms latency on CPU. (2) For motion words, the recorded webcam clip is transcoded by ffmpeg and sent natively to a LoRA-fine-tuned Qwen3-VL-8B via vLLM's video_url block — Qwen3-VL processes the entire clip with its own temporal encoder, no manual frame-sampling. The fine-tune was 54 minutes on a single AMD Instinct MI300X and lifts ASL accuracy from 19% zero-shot to 92% in transformers eval. (3) Qwen3-8B composes the recognised sign tokens into natural English; gTTS turns the sentence into speech. Both LLMs run concurrently on the same MI300X via vLLM. The 192 GB HBM3 of one MI300X holds the entire pipeline with margin — the same workload on NVIDIA H100 needs three GPUs.
 
 Fine-tune artefacts: the merged Qwen3-VL-8B-ASL is public at `huggingface.co/LucasLooTan/signbridge-qwen3vl-8b-asl`; the MediaPipe-MLP classifier is at `huggingface.co/LucasLooTan/signbridge-asl-classifier`. Both pulled at runtime via `hf_hub_download`. This satisfies both Track 3 (Vision & Multimodal) and Track 2 (Fine-Tuning on AMD GPUs) narratives — fine-tuning, ROCm, vLLM, and Hugging Face Optimum-AMD all in the same project.
 
-For motion-dependent signs (HELLO, THANK_YOU, PLEASE, EAT) the Record-sign tab captures 1.5 s of webcam, samples 4 evenly-spaced frames, and sends them as a multi-image VLM call with NVIDIA-style sequential frame markers in the prompt — most ASL signs are motion, not held poses, so single-frame approaches fundamentally cannot translate them.
+For motion-dependent signs (HELLO, THANK_YOU, PLEASE, EAT) the Record-sign tab uploads the recorded clip directly to Qwen3-VL via vLLM's `video_url` content block — most ASL signs are motion, not held poses, so single-frame approaches fundamentally cannot translate them.
 
 Why this matters: sign-language interpreters cost $50–200 per hour and are scarce. Courts, hospitals, schools, and public services must by law (ADA, EAA 2025) provide interpretation. Sorenson VRS — the dominant relay-services provider — books $4B+ in annual revenue filling this gap. SignBridge is an open-source MIT-licensed substrate that any Deaf-led NGO, school, ministry, or enterprise can deploy on their own AMD compute.
 
@@ -57,7 +57,7 @@ Pick from lablab's tag dropdown — these are the tags that match SignBridge:
 - `HuggingFace Spaces`
 
 **Secondary (relevant):**
-- `LLaMA` (Llama-3.1-8B composer)
+- `Qwen` / `Qwen3-8B` (composer model — counts toward Qwen Special Reward)
 - `Gradio`
 - `FastAPI`
 - `Vision`
