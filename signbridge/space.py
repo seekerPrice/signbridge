@@ -189,42 +189,24 @@ def _on_snapshot(
     top3 = list(lc.last_top3)
     top3_str = ", ".join(f"`{t}` ({c:.0%})" for t, c in top3) if top3 else ""
 
-    def _html_box(border_left: str, body: str) -> str:
-        return (
-            f'<div style="background:#f8fafc;border:1px solid #cbd5e1;'
-            f'border-left:4px solid {border_left};border-radius:6px;'
-            f'padding:12px 16px;margin:8px 0;min-height:56px;font-size:15px;">'
-            f'{body}</div>'
-        )
-
-    top3_html = ", ".join(
-        f"<code>{t}</code> ({c:.0%})" for t, c in top3
-    ) if top3 else ""
-
     if not token:
-        msg = _html_box(
-            "#dc2626",
-            "<b>✗ no hand detected</b> — show your hand clearly in frame and try again.",
-        )
+        msg = "**✗ no hand detected** — show your hand clearly in frame and try again"
         return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
     if confidence < _MIN_CONF_ACCEPT:
-        body = (
-            f"<b style='color:#dc2626'>✗ dropped <code>{token}</code> "
-            f"({confidence:.0%})</b> — too uncertain, please re-sign with a clearer pose."
+        msg = (
+            f"**✗ dropped `{token}` ({confidence:.0%})** — too uncertain, "
+            f"please re-sign with a clearer pose"
         )
-        if top3_html:
-            body += f"<br><span style='color:#475569;font-size:14px'>alternatives: {top3_html}</span>"
-        return (_html_box("#dc2626", body), _format_history(state.sign_history), state, gr.update(value=None))
+        if top3_str:
+            msg += f"\n\n_alternatives: {top3_str}_"
+        return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
     state.sign_history.append(token)
-    body = (
-        f"<b style='color:#16a34a'>✓ added <code>{token}</code> "
-        f"({confidence:.0%})</b>"
-    )
-    if top3_html:
-        body += f"<br><span style='color:#475569;font-size:14px'>alternatives: {top3_html}</span>"
-    return (_html_box("#16a34a", body), _format_history(state.sign_history), state, gr.update(value=None))
+    msg = f"**✓ added `{token}` ({confidence:.0%})**"
+    if top3_str:
+        msg += f"\n\n_alternatives: {top3_str}_"
+    return (msg, _format_history(state.sign_history), state, gr.update(value=None))
 
 
 def _show_landmarks(frame: np.ndarray | None) -> np.ndarray | None:
@@ -249,12 +231,8 @@ def _speak(state: _SessionState) -> tuple[str, str | None, _SessionState]:
     return sentence, state.last_audio_path, state
 
 
-_LATEST_PLACEHOLDER_HTML = (
-    '<div style="background:#f8fafc;border:1px solid #cbd5e1;'
-    'border-left:4px solid #4f46e5;border-radius:6px;'
-    'padding:12px 16px;margin:8px 0;min-height:56px;font-size:15px;">'
-    '<i>(awaiting capture — click the 📷 camera button above)</i>'
-    '</div>'
+_LATEST_PLACEHOLDER_MD = (
+    "_(awaiting capture — click the 📷 camera button to begin)_"
 )
 
 
@@ -265,7 +243,7 @@ def _clear(state: _SessionState) -> tuple[str, str, str, None, _SessionState]:
     state.last_sentence = ""
     state.last_audio_path = None
     return (
-        _LATEST_PLACEHOLDER_HTML,            # latest status (HTML)
+        _LATEST_PLACEHOLDER_MD,              # latest status (markdown)
         _format_history(state.sign_history), # history markdown
         "",                                  # composed sentence textbox
         None,                                # audio out
@@ -314,9 +292,9 @@ _WEBCAM_BUTTON_LABEL_CSS = """
 .signbridge-webcam-snapshot .source-selection {
     display: none !important;
 }
-/* Status banner styling lives inline on the gr.HTML component now —
-   moved off this CSS block to avoid Gradio elem_id wrapper / CSS-cache
-   issues that prevented the Markdown-based version from showing up. */
+/* Per-click status banner now lives in the right column as a labeled
+   gr.Markdown — no custom CSS needed; this block previously held style
+   for the gr.HTML/elem_id approach which was abandoned. */
 """
 
 
@@ -438,11 +416,21 @@ def build_demo() -> gr.Blocks:
                             clear_btn = gr.Button(
                                 "🧹 Clear history", variant="secondary", size="lg"
                             )
-                        latest = gr.HTML(value=_LATEST_PLACEHOLDER_HTML)
 
                     with gr.Column(scale=2):
                         history = gr.Markdown(
                             value=_format_history([]), label="Captured signs"
+                        )
+                        # latest = recognition result for the most recent
+                        # camera click. Placed in the right column next to
+                        # the history (where the user is already looking)
+                        # so feedback is impossible to miss. Labeled
+                        # gr.Markdown gives a guaranteed-visible block
+                        # without depending on inline CSS or elem_id
+                        # selectors that proved flaky on the Space.
+                        latest = gr.Markdown(
+                            value=_LATEST_PLACEHOLDER_MD,
+                            label="Latest result",
                         )
                         speak_btn = gr.Button("🔊 Speak", variant="primary", size="lg")
                         sentence_box = gr.Textbox(
